@@ -1,0 +1,142 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { ListPageLayout } from "@/components/layout/ListPageLayout";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { DataTable, type Column } from "@/components/ui/DataTable";
+import { PrimaryButton, RowActions } from "@/components/ui/CrudUi";
+import { useConfirm } from "@/components/ui/ConfirmDialog";
+import { CustomerCategoryFormModal } from "@/components/entity/CustomerCategoryModals";
+import { deleteConfirmMessage } from "@/lib/confirm-delete";
+import { auditColumns, sortByCreatedAtDesc } from "@/lib/list-columns";
+import { useI18n } from "@/lib/i18n";
+import { useMockStore } from "@/lib/mock-store";
+import type { CustomerCategory } from "@/lib/types";
+
+export default function CustomerCategoriesPage() {
+  const { t } = useI18n();
+  const confirm = useConfirm();
+  const {
+    customerCategories,
+    addCustomerCategory,
+    updateCustomerCategory,
+    removeCustomerCategory,
+    countCustomersInCategory,
+  } = useMockStore();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editId, setEditId] = useState<string | null>(null);
+
+  const rows = useMemo(
+    () => sortByCreatedAtDesc(customerCategories),
+    [customerCategories],
+  );
+
+  const editing = editId ? customerCategories.find((item) => item.id === editId) : undefined;
+
+  function nameExists(name: string, excludeId?: string) {
+    return customerCategories.some(
+      (item) => item.name === name && item.id !== excludeId,
+    );
+  }
+
+  function handleCreate(name: string) {
+    if (nameExists(name)) return false;
+    addCustomerCategory({ name });
+    return true;
+  }
+
+  function handleUpdate(name: string) {
+    if (!editing) return false;
+    if (nameExists(name, editing.id)) return false;
+    updateCustomerCategory(editing.id, { name });
+    return true;
+  }
+
+  async function handleDelete(row: CustomerCategory) {
+    const usage = countCustomersInCategory(row.name);
+    if (usage > 0) {
+      await confirm({
+        title: t("customers.categoryDeleteBlockedTitle"),
+        message: t("customers.categoryDeleteBlocked", { count: usage }),
+        confirmLabel: t("common.confirm"),
+        cancelLabel: t("common.close"),
+      });
+      return;
+    }
+    const ok = await confirm(deleteConfirmMessage(row.name));
+    if (!ok) return;
+    removeCustomerCategory(row.id);
+    if (editId === row.id) setEditId(null);
+  }
+
+  const columns: Column<CustomerCategory>[] = [
+    {
+      key: "name",
+      header: t("customers.categoryColName"),
+      render: (r) => <span className="font-medium">{r.name}</span>,
+    },
+    {
+      key: "usage",
+      header: t("customers.categoryColUsage"),
+      className: "tabular-nums",
+      render: (r) => countCustomersInCategory(r.name),
+    },
+    ...auditColumns(t),
+    {
+      key: "actions",
+      header: t("common.actions"),
+      stopRowClick: true,
+      render: (r) => (
+        <RowActions
+          onDetail={() => setEditId(r.id)}
+          onDelete={() => void handleDelete(r)}
+        />
+      ),
+    },
+  ];
+
+  return (
+    <ListPageLayout>
+      <PageHeader
+        breadcrumbs={[
+          { label: t("customers.title"), href: "/customers" },
+          { label: t("customers.manageCategories") },
+        ]}
+        actions={
+          <PrimaryButton onClick={() => setCreateOpen(true)}>
+            {t("customers.categoryNew")}
+          </PrimaryButton>
+        }
+      />
+      <DataTable fillHeight
+        columns={columns}
+        rows={rows}
+        rowKey={(r) => r.id}
+        onRowClick={(r) => setEditId(r.id)}
+      />
+      {createOpen ? (
+        <CustomerCategoryFormModal
+          open
+          onClose={() => setCreateOpen(false)}
+          title={t("customers.categoryNew")}
+          formId="customer-category-create-form"
+          initialName=""
+          onSubmit={handleCreate}
+          duplicateError={t("customers.categoryDuplicate")}
+        />
+      ) : null}
+      {editing ? (
+        <CustomerCategoryFormModal
+          open
+          onClose={() => setEditId(null)}
+          title={`${t("customers.categoryEdit")} · ${editing.name}`}
+          formId="customer-category-edit-form"
+          initialName={editing.name}
+          usageCount={countCustomersInCategory(editing.name)}
+          onSubmit={handleUpdate}
+          duplicateError={t("customers.categoryDuplicate")}
+        />
+      ) : null}
+    </ListPageLayout>
+  );
+}

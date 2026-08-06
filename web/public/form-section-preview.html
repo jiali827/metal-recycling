@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>弹窗分区样式 · 四方案完整弹窗对比</title>
+    <style>
+      :root {
+        --background: #f4f6f9;
+        --foreground: #0f172a;
+        --card: #ffffff;
+        --muted: #64748b;
+        --border: #e2e8f0;
+        --border-strong: #cbd5e1;
+        --chip: #f1f5f9;
+        --brand: #6366f1;
+        --brand-soft: #eef2ff;
+        --danger: #dc2626;
+        --radius-card: 12px;
+        --radius-control: 8px;
+        --shadow-panel: 0 20px 50px rgb(15 23 42 / 0.18);
+        --control-height-md: 2.5rem;
+        --control-hover-border: var(--border-strong);
+        --focus-border: var(--brand);
+        --focus-ring: 0 0 0 3px rgb(99 102 241 / 0.18);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--background);
+        color: var(--foreground);
+        font-family: "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+        line-height: 1.5;
+      }
+
+      .page {
+        max-width: 52rem;
+        margin: 0 auto;
+        padding: 1.5rem 1rem 4rem;
+      }
+
+      .page-header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        margin: 0 -1rem 1.25rem;
+        padding: 1rem;
+        background: rgb(244 246 249 / 0.92);
+        backdrop-filter: blur(8px);
+        border-bottom: 1px solid var(--border);
+      }
+
+      .page-header h1 {
+        margin: 0 0 0.375rem;
+        font-size: 1.125rem;
+        font-weight: 600;
+      }
+
+      .page-header p {
+        margin: 0 0 0.75rem;
+        font-size: 0.8125rem;
+        color: var(--muted);
+      }
+
+      .jump-nav {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+
+      .jump-nav a {
+        display: inline-flex;
+        align-items: center;
+        height: 2rem;
+        padding: 0 0.75rem;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-control);
+        background: #fff;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--foreground);
+        text-decoration: none;
+      }
+
+      .jump-nav a:hover {
+        border-color: var(--brand);
+        color: var(--brand);
+      }
+
+      .preview-block {
+        scroll-margin-top: 7rem;
+        margin-bottom: 2.5rem;
+      }
+
+      .preview-label {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 0.75rem;
+        padding: 0 0.25rem;
+      }
+
+      .preview-label h2 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 600;
+      }
+
+      .preview-label p {
+        margin: 0;
+        font-size: 0.75rem;
+        color: var(--muted);
+        text-align: right;
+      }
+
+      .ui-modal {
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-card);
+        background: var(--card);
+        box-shadow: var(--shadow-panel);
+        overflow: hidden;
+      }
+
+      .ui-modal-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.75rem;
+        padding: 1rem 1.25rem 0;
+      }
+
+      .ui-modal-head h3 {
+        margin: 0;
+        font-size: 1rem;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+      }
+
+      .ui-modal-close {
+        display: inline-flex;
+        height: 2rem;
+        width: 2rem;
+        align-items: center;
+        justify-content: center;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--muted);
+        cursor: pointer;
+      }
+
+      .ui-modal-close:hover {
+        background: var(--chip);
+        color: var(--foreground);
+      }
+
+      .ui-modal-body {
+        max-height: min(70vh, 640px);
+        overflow-y: auto;
+        padding: 1rem 1.25rem 1.25rem;
+      }
+
+      .ui-modal-foot {
+        display: flex;
+        justify-content: flex-end;
+        gap: 0.5rem;
+        padding: 0 1.25rem 1.25rem;
+      }
+
+      .ui-btn-secondary,
+      .ui-btn-primary {
+        height: 2.25rem;
+        padding: 0 1rem;
+        border-radius: var(--radius-control);
+        font-size: 0.875rem;
+        font-weight: 500;
+        cursor: pointer;
+      }
+
+      .ui-btn-secondary {
+        border: 1px solid var(--border);
+        background: #fff;
+        color: var(--foreground);
+      }
+
+      .ui-btn-primary {
+        border: 1px solid var(--brand);
+        background: var(--brand);
+        color: #fff;
+      }
+
+      .ui-form-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1rem;
+      }
+
+      .ui-form-span-2 {
+        grid-column: 1 / -1;
+      }
+
+      .ui-form-label {
+        display: block;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--muted);
+      }
+
+      .ui-form-required {
+        margin-left: 2px;
+        color: var(--danger);
+      }
+
+      .ui-input,
+      .ui-control-trigger,
+      .ui-input-affix {
+        margin-top: 0.25rem;
+        width: 100%;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-control);
+        background: #fff;
+        font-size: 0.875rem;
+        color: var(--foreground);
+        outline: none;
+      }
+
+      .ui-input,
+      .ui-control-trigger {
+        height: var(--control-height-md);
+        padding: 0 0.75rem;
+      }
+
+      .ui-control-trigger {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        text-align: left;
+        cursor: pointer;
+      }
+
+      .ui-control-trigger.is-open {
+        border-color: var(--focus-border);
+        box-shadow: var(--focus-ring);
+      }
+
+      .ui-control-trigger:disabled {
+        background: var(--chip);
+        color: #94a3b8;
+        cursor: not-allowed;
+      }
+
+      .ui-input-affix {
+        display: flex;
+        align-items: stretch;
+        overflow: hidden;
+      }
+
+      .ui-input-affix-input {
+        flex: 1;
+        min-width: 0;
+        height: var(--control-height-md);
+        border: 0;
+        background: transparent;
+        padding: 0 0.75rem;
+        font-size: 0.875rem;
+        outline: none;
+      }
+
+      .ui-input-affix-suffix {
+        display: flex;
+        align-items: center;
+        padding: 0 0.75rem;
+        border-left: 1px solid var(--border);
+        background: var(--chip);
+        font-size: 0.8125rem;
+        font-weight: 500;
+        color: var(--muted);
+        white-space: nowrap;
+      }
+
+      .ui-form-readonly {
+        margin-top: 0.25rem;
+        display: flex;
+        height: var(--control-height-md);
+        align-items: center;
+        font-size: 0.875rem;
+        color: var(--foreground);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .ui-form-readonly .muted {
+        color: var(--muted);
+      }
+
+      .ui-segmented {
+        margin-top: 0.25rem;
+        display: flex;
+        gap: 0.25rem;
+        padding: 0.25rem;
+        border-radius: var(--radius-control);
+        background: var(--chip);
+      }
+
+      .ui-segmented-item {
+        flex: 1;
+        height: calc(var(--control-height-md) - 0.5rem);
+        border: 0;
+        border-radius: calc(var(--radius-control) - 2px);
+        background: transparent;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--muted);
+        cursor: pointer;
+      }
+
+      .ui-segmented-item.is-active {
+        background: #fff;
+        color: var(--brand);
+        box-shadow: 0 1px 2px rgb(15 23 42 / 0.08);
+      }
+
+      textarea.ui-input {
+        height: auto;
+        min-height: 4.5rem;
+        padding: 0.5rem 0.75rem;
+        resize: vertical;
+      }
+
+      /* ===== 方案 A：当前线上 ===== */
+      .scheme-a .form-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 1.5rem;
+      }
+
+      .scheme-a .section-title {
+        margin: 0 0 0.75rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 1px solid var(--border);
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--foreground);
+      }
+
+      /* ===== 方案 B：顶线分隔 ===== */
+      .scheme-b .section + .section {
+        margin-top: 0.25rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid var(--border);
+      }
+
+      .scheme-b .section-title {
+        margin: 0 0 0.875rem;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        color: var(--muted);
+      }
+
+      /* ===== 方案 C：左色条 ===== */
+      .scheme-c .form-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 1.75rem;
+      }
+
+      .scheme-c .section-title {
+        display: flex;
+        align-items: center;
+        gap: 0.625rem;
+        margin: 0 0 0.875rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--foreground);
+      }
+
+      .scheme-c .section-title::before {
+        content: "";
+        width: 3px;
+        height: 0.875rem;
+        border-radius: 999px;
+        background: var(--brand);
+        flex-shrink: 0;
+      }
+
+      /* ===== 方案 D：间距优先 ===== */
+      .scheme-d .form-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 2rem;
+      }
+
+      .scheme-d .section-title {
+        margin: 0 0 0.75rem;
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: #334155;
+      }
+
+      .pick-hint {
+        margin-top: 0.5rem;
+        padding: 1rem;
+        border-radius: var(--radius-control);
+        background: #eef2ff;
+        font-size: 0.875rem;
+        color: #4338ca;
+      }
+
+      @media (max-width: 640px) {
+        .ui-form-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .preview-label {
+          flex-direction: column;
+          align-items: flex-start;
+        }
+
+        .preview-label p {
+          text-align: left;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="page">
+      <div class="page-header">
+        <h1>弹窗分区样式 · 四方案完整弹窗</h1>
+        <p>下方是四个完整的「新建磅单」弹窗，仅分区标题/间距不同。向下滚动对比，或点击跳转。</p>
+        <nav class="jump-nav" aria-label="方案跳转">
+          <a href="#scheme-a">方案 A</a>
+          <a href="#scheme-b">方案 B</a>
+          <a href="#scheme-c">方案 C</a>
+          <a href="#scheme-d">方案 D</a>
+        </nav>
+      </div>
+
+      <!-- 共用表单片段：用 JS 注入到四个弹窗，避免四份重复维护 -->
+      <template id="weigh-form-template">
+        <div class="form-stack">
+          <section class="section">
+            <h4 class="section-title">基本信息</h4>
+            <div class="ui-form-grid">
+              <div>
+                <label class="ui-form-label">单号 BX<span class="ui-form-required">*</span></label>
+                <input class="ui-input" value="38472" readonly />
+              </div>
+              <div>
+                <label class="ui-form-label">车牌 Truck No.</label>
+                <input class="ui-input" value="SD3117" />
+              </div>
+              <div>
+                <label class="ui-form-label">关联合同</label>
+                <button type="button" class="ui-control-trigger">
+                  <span>不关联合同</span>
+                  <span aria-hidden="true">▾</span>
+                </button>
+              </div>
+              <div>
+                <label class="ui-form-label">客户<span class="ui-form-required">*</span></label>
+                <button type="button" class="ui-control-trigger">
+                  <span>中国土木-洪水桥</span>
+                  <span aria-hidden="true">▾</span>
+                </button>
+              </div>
+              <div>
+                <label class="ui-form-label">货物类型<span class="ui-form-required">*</span></label>
+                <button type="button" class="ui-control-trigger">
+                  <span>AA</span>
+                  <span aria-hidden="true">▾</span>
+                </button>
+              </div>
+              <div>
+                <label class="ui-form-label">方向</label>
+                <div class="ui-segmented">
+                  <button type="button" class="ui-segmented-item is-active">采购</button>
+                  <button type="button" class="ui-segmented-item">销售</button>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="section">
+            <h4 class="section-title">过磅数据</h4>
+            <div class="ui-form-grid">
+              <div>
+                <label class="ui-form-label">总重 Gross<span class="ui-form-required">*</span></label>
+                <div class="ui-input-affix">
+                  <input class="ui-input-affix-input" value="30000" />
+                  <span class="ui-input-affix-suffix">KG</span>
+                </div>
+              </div>
+              <div>
+                <label class="ui-form-label">皮重 Tare<span class="ui-form-required">*</span></label>
+                <div class="ui-input-affix">
+                  <input class="ui-input-affix-input" value="20000" />
+                  <span class="ui-input-affix-suffix">KG</span>
+                </div>
+              </div>
+              <div>
+                <label class="ui-form-label">扣减 Deduction</label>
+                <div class="ui-input-affix">
+                  <input class="ui-input-affix-input" value="0" />
+                  <span class="ui-input-affix-suffix">KG</span>
+                </div>
+              </div>
+              <div>
+                <label class="ui-form-label">单价 Unit Price<span class="ui-form-required">*</span></label>
+                <div class="ui-input-affix">
+                  <input class="ui-input-affix-input" value="2.3" />
+                  <span class="ui-input-affix-suffix">HK$/KG</span>
+                </div>
+              </div>
+              <div>
+                <label class="ui-form-label">净重 Net (KG)</label>
+                <div class="ui-form-readonly">
+                  <span class="muted">净重 Net：10000 KG · 金额：</span>
+                  <strong> HK$ 23000.00</strong>
+                </div>
+              </div>
+              <div>
+                <label class="ui-form-label">过磅时间<span class="ui-form-required">*</span></label>
+                <button type="button" class="ui-control-trigger is-open">
+                  <span>2026-08-05 17:41</span>
+                  <span aria-hidden="true">📅</span>
+                </button>
+              </div>
+              <div class="ui-form-span-2">
+                <label class="ui-form-label">合同锁定示例（disabled）</label>
+                <button type="button" class="ui-control-trigger" disabled>中国土木-洪水桥</button>
+              </div>
+            </div>
+          </section>
+
+          <section class="section">
+            <h4 class="section-title">补充信息</h4>
+            <label class="ui-form-label">备注（可选）</label>
+            <textarea class="ui-input" placeholder="如：已付现金、货柜号…"></textarea>
+          </section>
+        </div>
+      </template>
+
+      <div id="scheme-a" class="preview-block">
+        <div class="preview-label">
+          <h2>方案 A · 当前线上</h2>
+          <p>标题下划线 · 24px 区块间距 · 14px 黑色加粗</p>
+        </div>
+        <div class="ui-modal scheme-a" role="dialog" aria-label="方案 A 新建磅单">
+          <div class="ui-modal-head">
+            <h3>新建磅单</h3>
+            <button type="button" class="ui-modal-close" aria-label="关闭">✕</button>
+          </div>
+          <div class="ui-modal-body" data-form-host></div>
+          <div class="ui-modal-foot">
+            <button type="button" class="ui-btn-secondary">取消</button>
+            <button type="button" class="ui-btn-primary">保存</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="scheme-b" class="preview-block">
+        <div class="preview-label">
+          <h2>方案 B · 顶线分隔</h2>
+          <p>区块顶部分隔线 · 13px muted 标题 · 无标题下划线</p>
+        </div>
+        <div class="ui-modal scheme-b" role="dialog" aria-label="方案 B 新建磅单">
+          <div class="ui-modal-head">
+            <h3>新建磅单</h3>
+            <button type="button" class="ui-modal-close" aria-label="关闭">✕</button>
+          </div>
+          <div class="ui-modal-body" data-form-host></div>
+          <div class="ui-modal-foot">
+            <button type="button" class="ui-btn-secondary">取消</button>
+            <button type="button" class="ui-btn-primary">保存</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="scheme-c" class="preview-block">
+        <div class="preview-label">
+          <h2>方案 C · 左色条</h2>
+          <p>品牌色竖线 · 28px 间距 · 无横线</p>
+        </div>
+        <div class="ui-modal scheme-c" role="dialog" aria-label="方案 C 新建磅单">
+          <div class="ui-modal-head">
+            <h3>新建磅单</h3>
+            <button type="button" class="ui-modal-close" aria-label="关闭">✕</button>
+          </div>
+          <div class="ui-modal-body" data-form-host></div>
+          <div class="ui-modal-foot">
+            <button type="button" class="ui-btn-secondary">取消</button>
+            <button type="button" class="ui-btn-primary">保存</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="scheme-d" class="preview-block">
+        <div class="preview-label">
+          <h2>方案 D · 间距优先</h2>
+          <p>32px 区块间距 · 14px 深灰标题 · 无横线/大写</p>
+        </div>
+        <div class="ui-modal scheme-d" role="dialog" aria-label="方案 D 新建磅单">
+          <div class="ui-modal-head">
+            <h3>新建磅单</h3>
+            <button type="button" class="ui-modal-close" aria-label="关闭">✕</button>
+          </div>
+          <div class="ui-modal-body" data-form-host></div>
+          <div class="ui-modal-foot">
+            <button type="button" class="ui-btn-secondary">取消</button>
+            <button type="button" class="ui-btn-primary">保存</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="pick-hint">
+        选定方案后告诉我（例如「选 D」或「B 的顶线 + D 的间距」），我再写入正式代码。控件淡底见
+        <a href="./form-control-fill-preview.html">form-control-fill-preview.html</a>。
+      </div>
+    </div>
+
+    <script>
+      const tpl = document.getElementById("weigh-form-template");
+      document.querySelectorAll("[data-form-host]").forEach((host) => {
+        host.appendChild(tpl.content.cloneNode(true));
+      });
+    </script>
+  </body>
+</html>
