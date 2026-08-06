@@ -14,7 +14,14 @@ import {
   SearchableSelect,
   inputClass,
 } from "@/shared/ui/CrudUi";
-import { contractFieldsForWeighTicket } from "@/entities/contract/form";
+import {
+  contractFieldsForPurchaseLine,
+  contractFieldsForSaleLine,
+  contractFieldsForWeighTicketFromPurchase,
+  contractFieldsForWeighTicketFromSale,
+} from "@/entities/contract/form";
+import { saleLineOverTolerance } from "@/entities/contract/summaries";
+import { nextWeighTicketBxNo } from "@/entities/weigh-ticket/bx-no";
 import { nowLocalDateTime } from "@/shared/lib/date";
 import { formatKg, formatMoney } from "@/shared/lib/format";
 import { useMockStore } from "@/data/mock/store";
@@ -23,6 +30,13 @@ import { useI18n } from "@/shared/i18n";
 import type { TicketDirection, TicketStatus } from "@/entities/types";
 
 const NO_CONTRACT = "";
+
+type ContractFields = {
+  direction: TicketDirection;
+  customerName: string;
+  materialSummary: string;
+  unitPrice: string;
+};
 
 function WeighDateTimeField({
   value,
@@ -53,13 +67,18 @@ export function WeighTicketCreateModal({
     contractNo?: string;
     direction?: TicketDirection;
     customerName?: string;
+    saleContractId?: string;
+    saleContractLineId?: string;
   };
 }) {
   const { t } = useI18n();
-  const { addWeighTicket, customers, contracts, materialTypes } = useMockStore();
+  const { addWeighTicket, weighTickets, customers, purchaseContracts, saleContracts, materialTypes } =
+    useMockStore();
   const moneyUnits = useMoneyUnits();
   const [bxNo, setBxNo] = useState("");
   const [contractNo, setContractNo] = useState(NO_CONTRACT);
+  const [saleContractId, setSaleContractId] = useState(NO_CONTRACT);
+  const [saleContractLineId, setSaleContractLineId] = useState(NO_CONTRACT);
   const [direction, setDirection] = useState<TicketDirection>("purchase");
   const [date, setDate] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -79,21 +98,26 @@ export function WeighTicketCreateModal({
     [t],
   );
 
-  const applyContractFields = (fields: ReturnType<typeof contractFieldsForWeighTicket>) => {
+  const applyContractFields = (fields: ContractFields) => {
     setDirection(fields.direction);
     setCustomerName(fields.customerName);
     if (fields.materialSummary) setMaterialSummary(fields.materialSummary);
     if (fields.unitPrice) setUnitPrice(fields.unitPrice);
   };
 
-  const contractLocked = Boolean(
-    contractNo && contracts.some((c) => c.no === contractNo),
-  );
+  const saleContract = saleContracts.find((c) => c.id === saleContractId);
+  const saleLine = saleContract?.lines.find((l) => l.id === saleContractLineId);
+  const contractLocked =
+    (direction === "sale" && Boolean(saleContractId && saleContractLineId)) ||
+    (direction === "purchase" &&
+      Boolean(contractNo && purchaseContracts.some((c) => c.no === contractNo)));
 
   useEffect(() => {
     if (!open) return;
-    setBxNo("");
+    setBxNo(nextWeighTicketBxNo(weighTickets));
     setContractNo(preset?.contractNo ?? NO_CONTRACT);
+    setSaleContractId(preset?.saleContractId ?? NO_CONTRACT);
+    setSaleContractLineId(preset?.saleContractLineId ?? NO_CONTRACT);
     setDirection(preset?.direction ?? "purchase");
     setDate(nowLocalDateTime());
     setCustomerName(preset?.customerName ?? "");
@@ -108,9 +132,26 @@ export function WeighTicketCreateModal({
 
   useEffect(() => {
     if (!open || !preset?.contractNo) return;
-    const contract = contracts.find((c) => c.no === preset.contractNo);
-    if (contract) applyContractFields(contractFieldsForWeighTicket(contract));
-  }, [open, preset?.contractNo, contracts]);
+    if (preset.direction === "sale" || preset.saleContractId) {
+      const sc =
+        saleContracts.find((c) => c.id === preset.saleContractId) ||
+        saleContracts.find((c) => c.no === preset.contractNo);
+      if (sc) {
+        setSaleContractId(sc.id);
+        const line =
+          sc.lines.find((l) => l.id === preset.saleContractLineId) ?? sc.lines[0];
+        if (line) {
+          setSaleContractLineId(line.id);
+          applyContractFields(contractFieldsForSaleLine(sc, line));
+        } else {
+          applyContractFields(contractFieldsForWeighTicketFromSale(sc));
+        }
+      }
+      return;
+    }
+    const pc = purchaseContracts.find((c) => c.no === preset.contractNo);
+    if (pc) applyContractFields(contractFieldsForWeighTicketFromPurchase(pc));
+  }, [open, preset, purchaseContracts, saleContracts]);
 
   const netKg = useMemo(() => {
     return Math.max(
@@ -128,25 +169,81 @@ export function WeighTicketCreateModal({
 
   const customerOptions = customers.map((c) => ({ value: c.name, label: c.name }));
   const materialOptions = materialTypes.map((m) => ({ value: m.name, label: m.name }));
-  const contractOptions = [
+  const purchaseContractOptions = [
     { value: NO_CONTRACT, label: t("form.noContract") },
-    ...contracts.map((c) => ({
+    ...purchaseContracts.map((c) => ({
       value: c.no,
       label: `${c.no} · ${c.customerName}`,
     })),
   ];
+  const saleContractOptions = [
+    { value: NO_CONTRACT, label: t("form.noContract") },
+    ...saleContracts
+      .filter((c) => c.status === "active" || c.status === "fulfilling")
+      .map((c) => ({
+        value: c.id,
+        label: `${c.no} · ${c.customerName}`,
+      })),
+  ];
+  const saleLineOptions =
+    saleContract?.lines.map((l) => ({
+      value: l.id,
+      label: `${l.materialName} · ${l.plannedQty} KG`,
+    })) ?? [];
 
-  function handleContractChange(no: string) {
+  function handlePurchaseContractChange(no: string) {
     setContractNo(no);
+    setSaleContractId(NO_CONTRACT);
+    setSaleContractLineId(NO_CONTRACT);
     if (!no) return;
-    const contract = contracts.find((c) => c.no === no);
-    if (contract) applyContractFields(contractFieldsForWeighTicket(contract));
+    const contract = purchaseContracts.find((c) => c.no === no);
+    if (contract) applyContractFields(contractFieldsForWeighTicketFromPurchase(contract));
+  }
+
+  function handleSaleContractChange(id: string) {
+    setSaleContractId(id);
+    setSaleContractLineId(NO_CONTRACT);
+    setContractNo(NO_CONTRACT);
+    if (!id) return;
+    const contract = saleContracts.find((c) => c.id === id);
+    if (!contract) return;
+    setContractNo(contract.no);
+    const line = contract.lines[0];
+    if (line) {
+      setSaleContractLineId(line.id);
+      applyContractFields(contractFieldsForSaleLine(contract, line));
+    }
+  }
+
+  function handleSaleLineChange(lineId: string) {
+    setSaleContractLineId(lineId);
+    if (!saleContract || !lineId) return;
+    const line = saleContract.lines.find((l) => l.id === lineId);
+    if (line) applyContractFields(contractFieldsForSaleLine(saleContract, line));
+  }
+
+  function handleDirectionChange(v: TicketDirection) {
+    setDirection(v);
+    setContractNo(NO_CONTRACT);
+    setSaleContractId(NO_CONTRACT);
+    setSaleContractLineId(NO_CONTRACT);
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (direction === "sale" && saleContractId && !saleContractLineId) return;
+    if (direction === "sale" && saleContract && saleLine) {
+      const projected = {
+        ...saleLine,
+        fulfilledQty: saleLine.fulfilledQty + netKg,
+      };
+      if (saleLineOverTolerance(projected, saleContract.tolerancePercent)) {
+        window.alert(t("contracts.overToleranceHint"));
+      }
+    }
+    const assignedBxNo = nextWeighTicketBxNo(weighTickets);
     const row = addWeighTicket({
-      bxNo,
+      bxNo: assignedBxNo,
       direction,
       date,
       customerName,
@@ -158,6 +255,9 @@ export function WeighTicketCreateModal({
       netKg,
       amount,
       contractNo: contractNo || "-",
+      saleContractId: direction === "sale" && saleContractId ? saleContractId : undefined,
+      saleContractLineId:
+        direction === "sale" && saleContractLineId ? saleContractLineId : undefined,
       status: "normal",
       remarks: remarks || undefined,
     });
@@ -185,8 +285,14 @@ export function WeighTicketCreateModal({
       <form id="weigh-create-form" onSubmit={handleSubmit}>
         <FormSection title={t("form.sectionBasic")}>
           <FormFieldGrid>
-            <FormField label={t("fields.bxNo")} required>
-              <input className={inputClass} required value={bxNo} onChange={(e) => setBxNo(e.target.value)} />
+            <FormField label={t("fields.bxNo")} hint={t("form.bxNoAutoHint")}>
+              <input
+                className={inputClass}
+                value={bxNo}
+                readOnly
+                disabled
+                tabIndex={-1}
+              />
             </FormField>
             <FormField label={t("fields.plate")}>
               <input
@@ -196,13 +302,44 @@ export function WeighTicketCreateModal({
                 placeholder={t("form.platePlaceholder")}
               />
             </FormField>
-            <FormField label={t("form.relatedContract")}>
-              <SearchableSelect
-                value={contractNo}
-                onChange={handleContractChange}
-                options={contractOptions}
+            <FormField label={t("fields.direction")}>
+              <OptionField
+                value={direction}
+                onChange={(v) => handleDirectionChange(v as TicketDirection)}
+                options={directionOptions}
+                disabled={contractLocked}
               />
             </FormField>
+            {direction === "purchase" ? (
+              <FormField label={t("form.relatedContract")}>
+                <SearchableSelect
+                  value={contractNo}
+                  onChange={handlePurchaseContractChange}
+                  options={purchaseContractOptions}
+                />
+              </FormField>
+            ) : (
+              <>
+                <FormField label={t("contracts.relatedSaleContract")}>
+                  <SearchableSelect
+                    value={saleContractId}
+                    onChange={handleSaleContractChange}
+                    options={saleContractOptions}
+                  />
+                </FormField>
+                <FormField label={t("contracts.relatedSaleLine")}>
+                  <SearchableSelect
+                    value={saleContractLineId}
+                    onChange={handleSaleLineChange}
+                    options={[
+                      { value: NO_CONTRACT, label: t("form.noContract") },
+                      ...saleLineOptions,
+                    ]}
+                    disabled={!saleContractId}
+                  />
+                </FormField>
+              </>
+            )}
             <FormField label={t("menu.customers")} required>
               <SearchableSelect
                 value={customerName}
@@ -221,14 +358,6 @@ export function WeighTicketCreateModal({
                 value={materialSummary}
                 onChange={setMaterialSummary}
                 options={materialOptions}
-                disabled={contractLocked}
-              />
-            </FormField>
-            <FormField label={t("fields.direction")}>
-              <OptionField
-                value={direction}
-                onChange={(v) => setDirection(v as TicketDirection)}
-                options={directionOptions}
                 disabled={contractLocked}
               />
             </FormField>
@@ -308,13 +437,15 @@ export function WeighTicketDetailModal({
   id: string | null;
 }) {
   const { t } = useI18n();
-  const { weighTickets, updateWeighTicket, customers, contracts, materialTypes } =
+  const { weighTickets, updateWeighTicket, customers, purchaseContracts, saleContracts, materialTypes } =
     useMockStore();
   const moneyUnits = useMoneyUnits();
   const row = id ? weighTickets.find((ticket) => ticket.id === id) : undefined;
 
   const [bxNo, setBxNo] = useState("");
   const [contractNo, setContractNo] = useState(NO_CONTRACT);
+  const [saleContractId, setSaleContractId] = useState(NO_CONTRACT);
+  const [saleContractLineId, setSaleContractLineId] = useState(NO_CONTRACT);
   const [direction, setDirection] = useState<TicketDirection>("purchase");
   const [date, setDate] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -344,16 +475,18 @@ export function WeighTicketDetailModal({
     [t],
   );
 
-  const applyContractFields = (fields: ReturnType<typeof contractFieldsForWeighTicket>) => {
+  const applyContractFields = (fields: ContractFields) => {
     setDirection(fields.direction);
     setCustomerName(fields.customerName);
     if (fields.materialSummary) setMaterialSummary(fields.materialSummary);
     if (fields.unitPrice) setUnitPrice(fields.unitPrice);
   };
 
-  const contractLocked = Boolean(
-    contractNo && contracts.some((c) => c.no === contractNo),
-  );
+  const saleContract = saleContracts.find((c) => c.id === saleContractId);
+  const contractLocked =
+    (direction === "sale" && Boolean(saleContractId && saleContractLineId)) ||
+    (direction === "purchase" &&
+      Boolean(contractNo && purchaseContracts.some((c) => c.no === contractNo)));
 
   useEffect(() => {
     if (!open || !row) return;
@@ -370,6 +503,8 @@ export function WeighTicketDetailModal({
       row.netKg > 0 ? Number((row.amount / row.netKg).toFixed(4)) : 0;
     setUnitPrice(String(derivedUnit));
     setContractNo(row.contractNo === "-" ? NO_CONTRACT : row.contractNo);
+    setSaleContractId(row.saleContractId ?? NO_CONTRACT);
+    setSaleContractLineId(row.saleContractLineId ?? NO_CONTRACT);
     setRemarks(row.remarks ?? "");
     setStatus(row.status);
     setSaved(false);
@@ -399,29 +534,93 @@ export function WeighTicketDetailModal({
     materialOptions.push({ value: materialSummary, label: materialSummary });
   }
 
-  const contractOptions = [
+  const purchaseContractOptions = [
     { value: NO_CONTRACT, label: t("form.noContract") },
-    ...contracts.map((c) => ({
+    ...purchaseContracts.map((c) => ({
       value: c.no,
       label: `${c.no} · ${c.customerName}`,
     })),
   ];
-  if (contractNo && !contracts.some((c) => c.no === contractNo)) {
-    contractOptions.push({ value: contractNo, label: contractNo });
+  if (contractNo && !purchaseContracts.some((c) => c.no === contractNo)) {
+    purchaseContractOptions.push({ value: contractNo, label: contractNo });
   }
 
-  function handleContractChange(no: string) {
+  const saleContractOptions = [
+    { value: NO_CONTRACT, label: t("form.noContract") },
+    ...saleContracts
+      .filter(
+        (c) =>
+          c.status === "active" ||
+          c.status === "fulfilling" ||
+          c.id === saleContractId,
+      )
+      .map((c) => ({
+        value: c.id,
+        label: `${c.no} · ${c.customerName}`,
+      })),
+  ];
+  const saleLineOptions =
+    saleContract?.lines.map((l) => ({
+      value: l.id,
+      label: `${l.materialName} · ${l.plannedQty} KG`,
+    })) ?? [];
+
+  function handlePurchaseContractChange(no: string) {
     setContractNo(no);
+    setSaleContractId(NO_CONTRACT);
+    setSaleContractLineId(NO_CONTRACT);
     if (!no) return;
-    const contract = contracts.find((c) => c.no === no);
-    if (contract) applyContractFields(contractFieldsForWeighTicket(contract));
+    const contract = purchaseContracts.find((c) => c.no === no);
+    if (contract) applyContractFields(contractFieldsForWeighTicketFromPurchase(contract));
+  }
+
+  function handleSaleContractChange(cid: string) {
+    setSaleContractId(cid);
+    setSaleContractLineId(NO_CONTRACT);
+    if (!cid) {
+      setContractNo(NO_CONTRACT);
+      return;
+    }
+    const contract = saleContracts.find((c) => c.id === cid);
+    if (!contract) return;
+    setContractNo(contract.no);
+    const line = contract.lines[0];
+    if (line) {
+      setSaleContractLineId(line.id);
+      applyContractFields(contractFieldsForSaleLine(contract, line));
+    }
+  }
+
+  function handleSaleLineChange(lineId: string) {
+    setSaleContractLineId(lineId);
+    if (!saleContract || !lineId) return;
+    const line = saleContract.lines.find((l) => l.id === lineId);
+    if (line) applyContractFields(contractFieldsForSaleLine(saleContract, line));
   }
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!row) return;
+    if (direction === "sale" && saleContractId && !saleContractLineId) return;
+    const saleLine = saleContract?.lines.find((l) => l.id === saleContractLineId);
+    if (direction === "sale" && saleContract && saleLine) {
+      const otherKg = weighTickets
+        .filter(
+          (t) =>
+            t.id !== row.id &&
+            t.status === "normal" &&
+            t.saleContractLineId === saleLine.id,
+        )
+        .reduce((s, t) => s + t.netKg, 0);
+      const projected = {
+        ...saleLine,
+        fulfilledQty: otherKg + (status === "normal" ? netKg : 0),
+      };
+      if (saleLineOverTolerance(projected, saleContract.tolerancePercent)) {
+        window.alert(t("contracts.overToleranceHint"));
+      }
+    }
     updateWeighTicket(row.id, {
-      bxNo,
       direction,
       date,
       customerName,
@@ -433,6 +632,9 @@ export function WeighTicketDetailModal({
       netKg,
       amount,
       contractNo: contractNo || "-",
+      saleContractId: direction === "sale" && saleContractId ? saleContractId : undefined,
+      saleContractLineId:
+        direction === "sale" && saleContractLineId ? saleContractLineId : undefined,
       status,
       remarks: remarks || undefined,
     });
@@ -443,7 +645,7 @@ export function WeighTicketDetailModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={row ? `${t("form.weighDetail")} · BX${row.bxNo}` : t("form.weighDetail")}
+      title={t("form.weighDetail")}
       size="xl"
       footer={
         row ? (
@@ -468,12 +670,13 @@ export function WeighTicketDetailModal({
         <form id="weigh-edit-form" onSubmit={handleSubmit}>
           <FormSection title={t("form.sectionBasic")}>
             <FormFieldGrid>
-              <FormField label={t("fields.bxNo")} required>
+              <FormField label={t("fields.bxNo")}>
                 <input
                   className={inputClass}
-                  required
                   value={bxNo}
-                  onChange={(e) => setBxNo(e.target.value)}
+                  readOnly
+                  disabled
+                  tabIndex={-1}
                 />
               </FormField>
               <FormField label={t("fields.plate")}>
@@ -484,13 +687,49 @@ export function WeighTicketDetailModal({
                   placeholder={t("form.platePlaceholder")}
                 />
               </FormField>
-              <FormField label={t("form.relatedContract")}>
-                <SearchableSelect
-                  value={contractNo}
-                  onChange={handleContractChange}
-                  options={contractOptions}
+              <FormField label={t("fields.direction")}>
+                <OptionField
+                  value={direction}
+                  onChange={(v) => {
+                    setDirection(v as TicketDirection);
+                    setContractNo(NO_CONTRACT);
+                    setSaleContractId(NO_CONTRACT);
+                    setSaleContractLineId(NO_CONTRACT);
+                  }}
+                  options={directionOptions}
+                  disabled={contractLocked}
                 />
               </FormField>
+              {direction === "purchase" ? (
+                <FormField label={t("form.relatedContract")}>
+                  <SearchableSelect
+                    value={contractNo}
+                    onChange={handlePurchaseContractChange}
+                    options={purchaseContractOptions}
+                  />
+                </FormField>
+              ) : (
+                <>
+                  <FormField label={t("contracts.relatedSaleContract")}>
+                    <SearchableSelect
+                      value={saleContractId}
+                      onChange={handleSaleContractChange}
+                      options={saleContractOptions}
+                    />
+                  </FormField>
+                  <FormField label={t("contracts.relatedSaleLine")}>
+                    <SearchableSelect
+                      value={saleContractLineId}
+                      onChange={handleSaleLineChange}
+                      options={[
+                        { value: NO_CONTRACT, label: t("form.noContract") },
+                        ...saleLineOptions,
+                      ]}
+                      disabled={!saleContractId}
+                    />
+                  </FormField>
+                </>
+              )}
               <FormField label={t("menu.customers")} required>
                 <SearchableSelect
                   value={customerName}
@@ -509,14 +748,6 @@ export function WeighTicketDetailModal({
                   value={materialSummary}
                   onChange={setMaterialSummary}
                   options={materialOptions}
-                  disabled={contractLocked}
-                />
-              </FormField>
-              <FormField label={t("fields.direction")}>
-                <OptionField
-                  value={direction}
-                  onChange={(v) => setDirection(v as TicketDirection)}
-                  options={directionOptions}
                   disabled={contractLocked}
                 />
               </FormField>

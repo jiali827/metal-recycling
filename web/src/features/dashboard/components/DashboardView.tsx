@@ -422,7 +422,7 @@ export default function DashboardView() {
   const motionKey = `${range.start}_${range.end}`;
 
   return (
-    <div className="ui-page-scroll">
+    <div className="ui-page-scroll is-scrollbar-hidden">
       <PageHeader
         title={t("dashboard.title")}
         actions={

@@ -67,7 +67,6 @@ export function MultiSelect({
         ? { bottom: window.innerHeight - rect.top + 4 }
         : { top: rect.bottom + 4 }),
       maxHeight: 240,
-      overflowY: "auto",
     });
   }, []);
 
@@ -163,7 +162,7 @@ export function MultiSelect({
             id={listboxId}
             role="listbox"
             aria-multiselectable="true"
-            className="ui-panel"
+            className="ui-panel ui-panel-scroll"
             style={panelStyle}
           >
             {options.length === 0 ? (

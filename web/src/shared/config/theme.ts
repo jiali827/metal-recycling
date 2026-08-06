@@ -9,6 +9,7 @@ export const THEME_PRESETS = [
   { id: "green", hex: "#41b85e", label: "绿色" },
   { id: "amber", hex: "#f87034", label: "琥珀色" },
   { id: "pink", hex: "#fc3354", label: "粉色" },
+  { id: "olive", hex: "#998f6c", label: "橄榄褐" },
 ] as const;
 
 function clamp(n: number, min = 0, max = 255) {

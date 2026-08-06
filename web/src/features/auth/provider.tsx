@@ -15,7 +15,6 @@ import {
   userHasEnabledRole,
 } from "@/entities/employee/roles";
 import { getActiveMessages } from "@/shared/i18n";
-import { tenant } from "@/data/mock/seed";
 import { useMockStore } from "@/data/mock/store";
 import {
   getStoredPassword,
@@ -28,7 +27,7 @@ import type { RoleDef, Tenant, User } from "@/entities/types";
 
 const STORAGE_KEY = "baoxin-mock-session";
 
-/** 演示帳號：任意密碼可登入 */
+/** 特殊入口账号：首次可用任意密码登录 */
 export const DEMO_EMAIL = "demo@baoxin.hk";
 
 interface AuthContextValue {
@@ -67,7 +66,7 @@ function demoSessionUser(email: string, name: string | undefined): User {
   const now = nowISO();
   return {
     id: "u-demo",
-    name: name ?? m.auth.demoUser,
+    name: name ?? m.auth.defaultUserName,
     email,
     roleIds: ["admin"],
     status: "active",
@@ -77,7 +76,7 @@ function demoSessionUser(email: string, name: string | undefined): User {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { employees, roles, updateEmployee } = useMockStore();
+  const { employees, roles, updateEmployee, tenant } = useMockStore();
   const [user, setUser] = useState<User | null>(null);
   const [ready, setReady] = useState(false);
 
@@ -257,7 +256,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updateProfile,
       changePassword,
     }),
-    [user, ready, login, logout, updateProfile, changePassword],
+    [user, tenant, ready, login, logout, updateProfile, changePassword],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

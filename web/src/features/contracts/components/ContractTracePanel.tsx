@@ -269,10 +269,25 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
   const { t } = useI18n();
   const confirm = useConfirm();
   const {
-    contracts: allContracts,
+    purchaseContracts,
+    saleContracts,
     removeWeighTicket,
     removePayment,
   } = useMockStore();
+
+  const allContracts = useMemo(
+    () => [
+      ...purchaseContracts.map((c) => ({
+        id: c.id,
+        customerId: c.customerId,
+      })),
+      ...saleContracts.map((c) => ({
+        id: c.id,
+        customerId: c.customerId,
+      })),
+    ],
+    [purchaseContracts, saleContracts],
+  );
 
   const { contract, customer, tickets, settlements, payments, summary } = trace;
 
@@ -293,6 +308,7 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
       contractNo: contract.no,
       direction: contract.type,
       customerName: contract.customerName,
+      saleContractId: contract.type === "sale" ? contract.id : undefined,
     }),
     [contract],
   );

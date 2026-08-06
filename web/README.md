@@ -2,6 +2,8 @@
 
 Next.js App Router + TypeScript + Tailwind。按 **features / entities / data / shared** 分层，便于长期维护与后端接入。
 
+系统级技术架构（现状 + 目标演进）见仓库根目录：[docs/architecture.md](../docs/architecture.md)。
+
 ## 启动
 
 ```bash

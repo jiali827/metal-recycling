@@ -1,5 +1,6 @@
 export const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 export const AVATAR_OUTPUT_SIZE = 256;
+export const LOGO_OUTPUT_SIZE = 192;
 export const AVATAR_JPEG_QUALITY = 0.88;
 export const AVATAR_ACCEPT_TYPES = [
   "image/jpeg",
@@ -25,8 +26,11 @@ function loadImageFromFile(file: File): Promise<HTMLImageElement> {
   });
 }
 
-/** 居中裁切为正方形并输出 JPEG Data URL（演示环境本地存储） */
-export async function processAvatarFile(file: File): Promise<string> {
+/** 居中裁切为正方形并输出 JPEG Data URL */
+async function processSquareImageFile(
+  file: File,
+  outputSize: number,
+): Promise<string> {
   if (!AVATAR_ACCEPT_TYPES.includes(file.type as typeof AVATAR_ACCEPT_TYPES[number])) {
     throw new Error("type");
   }
@@ -40,13 +44,23 @@ export async function processAvatarFile(file: File): Promise<string> {
   const sy = (img.naturalHeight - side) / 2;
 
   const canvas = document.createElement("canvas");
-  canvas.width = AVATAR_OUTPUT_SIZE;
-  canvas.height = AVATAR_OUTPUT_SIZE;
+  canvas.width = outputSize;
+  canvas.height = outputSize;
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("decode");
 
-  ctx.drawImage(img, sx, sy, side, side, 0, 0, AVATAR_OUTPUT_SIZE, AVATAR_OUTPUT_SIZE);
+  ctx.drawImage(img, sx, sy, side, side, 0, 0, outputSize, outputSize);
   return canvas.toDataURL("image/jpeg", AVATAR_JPEG_QUALITY);
+}
+
+/** 居中裁切为正方形并输出 JPEG Data URL（演示环境本地存储） */
+export async function processAvatarFile(file: File): Promise<string> {
+  return processSquareImageFile(file, AVATAR_OUTPUT_SIZE);
+}
+
+/** 公司 Logo：正方形裁切，侧栏展示用 */
+export async function processLogoFile(file: File): Promise<string> {
+  return processSquareImageFile(file, LOGO_OUTPUT_SIZE);
 }
 
 export function parseAvatarProcessError(err: unknown): AvatarProcessError {

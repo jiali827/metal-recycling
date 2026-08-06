@@ -173,7 +173,7 @@ function ArApCreateForm({
 
   return (
     <form id={formId} onSubmit={handleSubmit}>
-      <FormSection title={t("form.sectionBasic")}>
+      <FormSection>
         <FormFieldGrid>
           <FormField label={t("form.relatedTicket")} required>
             <SearchableSelect
@@ -334,7 +334,7 @@ function ArApEditForm({
 
   return (
     <form id={formId} onSubmit={handleSubmit}>
-      <FormSection title={t("form.sectionBasic")}>
+      <FormSection>
         <FormFieldGrid>
           <FormField label={t("form.relatedTicket")} required>
             <SearchableSelect
@@ -489,7 +489,7 @@ export function ReceivableDetailModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={row ? `${t("form.receivableDetail")} · BX${row.ticketBxNo}` : t("form.receivableDetail")}
+      title={t("form.receivableDetail")}
       size="lg"
       footer={
         row ? (
@@ -586,7 +586,7 @@ export function PayableDetailModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={row ? `${t("form.payableDetail")} · BX${row.ticketBxNo}` : t("form.payableDetail")}
+      title={t("form.payableDetail")}
       size="lg"
       footer={
         row ? (

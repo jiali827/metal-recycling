@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { TableScrollArea } from "@/shared/ui/TableScrollArea";
+import { TableScrollArea, TableSplitScrollArea } from "@/shared/ui/TableScrollArea";
 import { PAGE_SIZE_OPTIONS, TablePagination } from "@/shared/ui/TablePagination";
 import { useI18n } from "@/shared/i18n";
 
@@ -78,6 +78,113 @@ export function DataTable<T>({
     return `ui-data-table-head whitespace-nowrap px-4 py-3 text-xs font-semibold text-muted${sticky}${col.className ? ` ${col.className}` : ""}`;
   }
 
+  const tableClass = "ui-data-table min-w-full border-separate border-spacing-0 text-sm";
+
+  const headerTable = (
+    <table className={tableClass}>
+      <thead>
+        <tr className="border-b border-border bg-chip text-left">
+          {columns.map((col) => (
+            <th key={col.key} className={headClassName(col)}>
+              {col.header}
+            </th>
+          ))}
+        </tr>
+      </thead>
+    </table>
+  );
+
+  const bodyTable = (
+    <table className={tableClass}>
+      <tbody>
+        {pageRows.length === 0 ? (
+          <tr>
+            <td
+              colSpan={columns.length}
+              className="px-4 py-12 text-center text-muted"
+            >
+              {resolvedEmpty}
+            </td>
+          </tr>
+        ) : (
+          pageRows.map((row) => (
+            <tr
+              key={rowKey(row)}
+              className={`border-b border-border/70 last:border-0 ${
+                onRowClick ? "cursor-pointer" : ""
+              }`}
+              onClick={() => onRowClick?.(row)}
+            >
+              {columns.map((col) => (
+                <td
+                  key={col.key}
+                  className={cellClassName(col)}
+                  onClick={
+                    col.stopRowClick
+                      ? (e) => e.stopPropagation()
+                      : undefined
+                  }
+                >
+                  {col.render(row)}
+                </td>
+              ))}
+            </tr>
+          ))
+        )}
+      </tbody>
+    </table>
+  );
+
+  const fullTable = (
+    <table className={tableClass}>
+      <thead>
+        <tr className="border-b border-border bg-chip text-left">
+          {columns.map((col) => (
+            <th key={col.key} className={headClassName(col)}>
+              {col.header}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {pageRows.length === 0 ? (
+          <tr>
+            <td
+              colSpan={columns.length}
+              className="px-4 py-12 text-center text-muted"
+            >
+              {resolvedEmpty}
+            </td>
+          </tr>
+        ) : (
+          pageRows.map((row) => (
+            <tr
+              key={rowKey(row)}
+              className={`border-b border-border/70 last:border-0 ${
+                onRowClick ? "cursor-pointer" : ""
+              }`}
+              onClick={() => onRowClick?.(row)}
+            >
+              {columns.map((col) => (
+                <td
+                  key={col.key}
+                  className={cellClassName(col)}
+                  onClick={
+                    col.stopRowClick
+                      ? (e) => e.stopPropagation()
+                      : undefined
+                  }
+                >
+                  {col.render(row)}
+                </td>
+              ))}
+            </tr>
+          ))
+        )}
+      </tbody>
+    </table>
+  );
+
   const rootClass = [
     embedded ? "" : "ui-card",
     fillHeight ? "ui-data-table-fill" : "overflow-hidden",
@@ -87,58 +194,15 @@ export function DataTable<T>({
 
   return (
     <div className={rootClass}>
-      <TableScrollArea
-        scrollY={fillHeight}
-        className={fillHeight ? "ui-data-table-scroll" : undefined}
-      >
-        <table className="ui-data-table min-w-full border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-border bg-chip text-left">
-              {columns.map((col) => (
-                <th key={col.key} className={headClassName(col)}>
-                  {col.header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {pageRows.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={columns.length}
-                  className="px-4 py-12 text-center text-muted"
-                >
-                  {resolvedEmpty}
-                </td>
-              </tr>
-            ) : (
-              pageRows.map((row) => (
-                <tr
-                  key={rowKey(row)}
-                  className={`border-b border-border/70 last:border-0 ${
-                    onRowClick ? "cursor-pointer" : ""
-                  }`}
-                  onClick={() => onRowClick?.(row)}
-                >
-                  {columns.map((col) => (
-                    <td
-                      key={col.key}
-                      className={cellClassName(col)}
-                      onClick={
-                        col.stopRowClick
-                          ? (e) => e.stopPropagation()
-                          : undefined
-                      }
-                    >
-                      {col.render(row)}
-                    </td>
-                  ))}
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </TableScrollArea>
+      {fillHeight ? (
+        <TableSplitScrollArea
+          className="ui-data-table-scroll"
+          header={headerTable}
+          body={bodyTable}
+        />
+      ) : (
+        <TableScrollArea>{fullTable}</TableScrollArea>
+      )}
       {showPagination ? (
         <TablePagination
           total={rows.length}

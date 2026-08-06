@@ -67,3 +67,15 @@ export function setStoredPassword(email: string, password: string) {
   map[key] = password;
   writeMap(map);
 }
+
+/** 新建员工：初始密码与登录账号（邮箱）相同 */
+export function initializeAccountPassword(email: string) {
+  const account = email.trim();
+  if (!account) return;
+  setStoredPassword(account, account);
+}
+
+/** 管理员重置密码为与账号（邮箱）相同 */
+export function resetPasswordToAccount(email: string) {
+  initializeAccountPassword(email);
+}

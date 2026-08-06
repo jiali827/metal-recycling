@@ -10,7 +10,9 @@ interface ModalProps {
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
-  size?: "md" | "lg" | "xl" | "2xl";
+  size?: "md" | "lg" | "xl" | "2xl" | "3xl";
+  /** 覆盖 body 默认样式（如左右分栏弹窗） */
+  bodyClassName?: string;
 }
 
 const sizeClass = {
@@ -18,6 +20,7 @@ const sizeClass = {
   lg: "max-w-2xl",
   xl: "max-w-3xl",
   "2xl": "max-w-5xl",
+  "3xl": "max-w-6xl",
 };
 
 export function Modal({
@@ -27,6 +30,7 @@ export function Modal({
   children,
   footer,
   size = "md",
+  bodyClassName,
 }: ModalProps) {
   const { t } = useI18n();
   const cardRef = useRef<HTMLDivElement>(null);
@@ -78,6 +82,8 @@ export function Modal({
 
   if (!open) return null;
 
+  const tall = size === "2xl" || size === "3xl";
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <button
@@ -91,7 +97,9 @@ export function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        className={`ui-modal-card relative flex max-h-[min(90vh,840px)] w-full ${sizeClass[size]} flex-col overflow-hidden rounded-[12px] border border-border bg-card shadow-[0_20px_50px_rgb(15_23_42_/_0.18)]`}
+        className={`ui-modal-card relative flex w-full ${sizeClass[size]} flex-col overflow-hidden rounded-[12px] border border-border bg-card shadow-[0_20px_50px_rgb(15_23_42_/_0.18)] ${
+          tall ? "max-h-[min(92vh,900px)]" : "max-h-[min(90vh,840px)]"
+        }`}
       >
         <div className="flex shrink-0 items-center justify-between gap-3 px-7 pb-2 pt-4">
           <h2
@@ -110,7 +118,14 @@ export function Modal({
           </button>
         </div>
 
-        <div className="ui-modal-body ui-scrollbar-overlay px-7 pb-4 pt-2">{children}</div>
+        <div
+          className={
+            bodyClassName ??
+            "ui-modal-body ui-scrollbar-overlay min-h-0 flex-1 overflow-y-auto px-7 pb-4 pt-2"
+          }
+        >
+          {children}
+        </div>
 
         {footer ? (
           <div className="flex shrink-0 items-center justify-end gap-2 px-7 pb-4 pt-3">

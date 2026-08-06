@@ -61,7 +61,7 @@ function ContractModalSplit({
           onChange={onAttachmentChange}
         />
       </div>
-      <div className="ui-scrollbar-overlay space-y-4 lg:min-h-0 lg:overflow-y-auto lg:pr-1">
+      <div className="ui-scrollbar-overlay ui-scrollbar-hidden space-y-4 lg:min-h-0 lg:overflow-y-auto lg:pl-1.5 lg:pr-1">
         {children}
       </div>
     </div>

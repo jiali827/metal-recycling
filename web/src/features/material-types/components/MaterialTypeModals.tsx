@@ -129,7 +129,7 @@ export function MaterialTypeDetailModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={row ? `${t("form.materialDetail")} · ${row.name}` : t("form.materialDetail")}
+      title={t("form.materialDetail")}
       footer={
         row ? (
           <>

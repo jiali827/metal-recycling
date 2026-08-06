@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft } from "@phosphor-icons/react";
 import { ContractTracePanel } from "@/features/contracts/components/ContractTracePanel";
+import { ListPageLayout } from "@/shared/layout/ListPageLayout";
 import { PageHeader } from "@/shared/ui/PageHeader";
 import {
   FilterBar,
@@ -12,6 +13,10 @@ import {
 import { Select } from "@/shared/ui/CrudUi";
 import { SegmentedControl } from "@/shared/ui/forms/SegmentedControl";
 import { StatusBadge } from "@/shared/ui/StatusBadge";
+import {
+  CARD_PAGE_SIZE_OPTIONS,
+  TablePagination,
+} from "@/shared/ui/TablePagination";
 import { contractStatusTone } from "@/entities/contract/status";
 import {
   DIRECTION_PURCHASE_COLOR,
@@ -25,6 +30,8 @@ import { buildContractTraces, type ContractTrace } from "@/entities/transaction/
 import type { ContractType } from "@/entities/types";
 
 type TypeTab = "all" | ContractType;
+
+const DEFAULT_CARD_PAGE_SIZE = 12;
 
 function ProjectCard({
   trace,
@@ -98,11 +105,14 @@ export default function TransactionsPage() {
   const [keyword, setKeyword] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(DEFAULT_CARD_PAGE_SIZE);
 
   const traces = useMemo(
     () =>
       buildContractTraces({
-        contracts: store.contracts,
+        purchaseContracts: store.purchaseContracts,
+        saleContracts: store.saleContracts,
         customers: store.customers,
         weighTickets: store.weighTickets,
         receivables: store.receivables,
@@ -127,6 +137,13 @@ export default function TransactionsPage() {
     });
   }, [traces, typeTab, keyword, statusFilter]);
 
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+
+  const pageRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, page, pageSize]);
+
   const selected = useMemo(() => {
     if (!selectedId) return null;
     return traces.find((tr) => tr.contract.id === selectedId) ?? null;
@@ -137,6 +154,14 @@ export default function TransactionsPage() {
       setSelectedId(null);
     }
   }, [traces, selectedId]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [typeTab, keyword, statusFilter, pageSize]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   const typeCounts = useMemo(() => {
     const sale = traces.filter((tr) => tr.contract.type === "sale").length;
@@ -155,8 +180,8 @@ export default function TransactionsPage() {
 
   if (selectedId) {
     return (
-      <div className="ui-page-scroll">
-        <div className="mb-3">
+      <ListPageLayout>
+        <div className="shrink-0">
           <button
             type="button"
             className="ui-btn-secondary inline-flex h-9 items-center gap-1.5 px-3 text-sm"
@@ -166,19 +191,21 @@ export default function TransactionsPage() {
             {t("transactions.backToList")}
           </button>
         </div>
-        {selected ? (
-          <ContractTracePanel trace={selected} />
-        ) : (
-          <div className="ui-card flex min-h-[240px] items-center justify-center p-8 text-sm text-muted">
-            {t("transactions.contractNotFound")}
-          </div>
-        )}
-      </div>
+        <div className="ui-page-scroll is-scrollbar-hidden min-h-0 flex-1">
+          {selected ? (
+            <ContractTracePanel trace={selected} />
+          ) : (
+            <div className="ui-card flex min-h-[240px] items-center justify-center p-8 text-sm text-muted">
+              {t("transactions.contractNotFound")}
+            </div>
+          )}
+        </div>
+      </ListPageLayout>
     );
   }
 
   return (
-    <div className="ui-page-scroll">
+    <ListPageLayout>
       <PageHeader title={t("transactions.title")} />
 
       <FilterBar>
@@ -217,25 +244,35 @@ export default function TransactionsPage() {
         </FilterField>
       </FilterBar>
 
-      <p className="mb-4 text-xs text-muted">
-        {t("pagination.total", { count: filtered.length })}
-      </p>
-
       {filtered.length === 0 ? (
-        <div className="ui-card flex min-h-[240px] items-center justify-center p-8 text-sm text-muted">
+        <div className="ui-card flex min-h-[240px] flex-1 items-center justify-center p-8 text-sm text-muted">
           {t("common.empty")}
         </div>
       ) : (
-        <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-          {filtered.map((trace) => (
-            <ProjectCard
-              key={trace.contract.id}
-              trace={trace}
-              onOpen={() => setSelectedId(trace.contract.id)}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+              {pageRows.map((trace) => (
+                <ProjectCard
+                  key={trace.contract.id}
+                  trace={trace}
+                  onOpen={() => setSelectedId(trace.contract.id)}
+                />
+              ))}
+            </div>
+          </div>
+          <div className="ui-card mt-4 shrink-0 overflow-hidden">
+            <TablePagination
+              total={filtered.length}
+              page={page}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              pageSizeOptions={CARD_PAGE_SIZE_OPTIONS}
             />
-          ))}
+          </div>
         </div>
       )}
-    </div>
+    </ListPageLayout>
   );
 }

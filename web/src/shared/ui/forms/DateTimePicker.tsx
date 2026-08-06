@@ -335,7 +335,7 @@ export function DateTimePicker({
                 </div>
               </div>
               <div className="ui-datetime-time">
-                <div ref={hourColRef} className="ui-datetime-time-col" aria-label="Hour">
+                <div ref={hourColRef} className="ui-datetime-time-col ui-panel-scroll" aria-label="Hour">
                   {HOURS.map((hour) => (
                     <button
                       key={hour}
@@ -347,7 +347,7 @@ export function DateTimePicker({
                     </button>
                   ))}
                 </div>
-                <div ref={minuteColRef} className="ui-datetime-time-col" aria-label="Minute">
+                <div ref={minuteColRef} className="ui-datetime-time-col ui-panel-scroll" aria-label="Minute">
                   {MINUTES.map((minute) => (
                     <button
                       key={minute}

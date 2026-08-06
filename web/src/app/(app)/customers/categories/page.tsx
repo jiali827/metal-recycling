@@ -129,7 +129,7 @@ export default function CustomerCategoriesPage() {
         <CustomerCategoryFormModal
           open
           onClose={() => setEditId(null)}
-          title={`${t("customers.categoryEdit")} · ${editing.name}`}
+          title={t("customers.categoryEdit")}
           formId="customer-category-edit-form"
           initialName={editing.name}
           usageCount={countCustomersInCategory(editing.name)}

@@ -6,6 +6,8 @@ import { Select } from "@/shared/ui/forms/Select";
 import { useI18n } from "@/shared/i18n";
 
 export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100] as const;
+/** 卡片网格页：每页数量为列数的整数倍（桌面 3 列） */
+export const CARD_PAGE_SIZE_OPTIONS = [9, 12, 18, 24] as const;
 
 export function getPaginationRange(
   current: number,

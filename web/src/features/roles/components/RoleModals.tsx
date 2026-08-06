@@ -152,11 +152,7 @@ export function RoleDetailModal({
       open={open}
       onClose={onClose}
       size="2xl"
-      title={
-        row
-          ? `${t("form.roleDetail")} · ${localizeRoleName(row.id, row.name)}`
-          : t("form.roleDetail")
-      }
+      title={t("form.roleDetail")}
       footer={
         row ? (
           <>

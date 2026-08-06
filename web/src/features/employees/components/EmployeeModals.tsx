@@ -14,7 +14,16 @@ import {
   buildEmployeeRoles,
   getUserRoleIds,
 } from "@/entities/employee/roles";
+import {
+  isEmployeeEmailTaken,
+  normalizeEmployeeEmail,
+} from "@/entities/employee/email";
+import {
+  initializeAccountPassword,
+  resetPasswordToAccount,
+} from "@/entities/auth/password";
 import { useMockStore } from "@/data/mock/store";
+import { useConfirm } from "@/shared/ui/ConfirmDialog";
 import { localizeRoleName, useI18n } from "@/shared/i18n";
 import type { RoleId } from "@/entities/types";
 
@@ -56,12 +65,13 @@ export function EmployeeCreateModal({
   onCreated?: (id: string) => void;
 }) {
   const { t } = useI18n();
-  const { addEmployee, roles } = useMockStore();
+  const { addEmployee, roles, employees } = useMockStore();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [roleIds, setRoleIds] = useState<RoleId[]>([]);
   const [status, setStatus] = useState<"active" | "disabled">("disabled");
   const [roleError, setRoleError] = useState("");
+  const [emailError, setEmailError] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -70,6 +80,7 @@ export function EmployeeCreateModal({
     setRoleIds([]);
     setStatus("disabled");
     setRoleError("");
+    setEmailError("");
   }, [open]);
 
   const roleOptions = roles
@@ -81,17 +92,23 @@ export function EmployeeCreateModal({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    const trimmedEmail = email.trim();
+    if (isEmployeeEmailTaken(employees, trimmedEmail)) {
+      setEmailError(t("employees.emailDuplicate"));
+      return;
+    }
     const normalized = buildEmployeeRoles(roleIds, roles);
     if (normalized.length === 0) {
       setRoleError(t("form.roleRequired"));
       return;
     }
     const row = addEmployee({
-      name,
-      email,
+      name: name.trim(),
+      email: normalizeEmployeeEmail(trimmedEmail),
       roleIds: normalized,
       status,
     });
+    initializeAccountPassword(row.email);
     onCreated?.(row.id);
     onClose();
   }
@@ -126,9 +143,13 @@ export function EmployeeCreateModal({
             type="email"
             required
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              setEmailError("");
+            }}
             autoComplete="off"
           />
+          {emailError ? <p className="mt-1 text-sm text-danger">{emailError}</p> : null}
         </FormField>
         <FormField label={t("form.role")} required>
           <RoleMultiSelect
@@ -165,12 +186,14 @@ export function EmployeeDetailModal({
   id: string | null;
 }) {
   const { t } = useI18n();
+  const confirm = useConfirm();
   const { employees, roles, updateEmployee } = useMockStore();
   const row = id ? employees.find((u) => u.id === id) : undefined;
   const [name, setName] = useState("");
   const [roleIds, setRoleIds] = useState<RoleId[]>(["admin"]);
   const [status, setStatus] = useState<"active" | "disabled">("active");
   const [saved, setSaved] = useState(false);
+  const [passwordReset, setPasswordReset] = useState(false);
   const [roleError, setRoleError] = useState("");
 
   useEffect(() => {
@@ -179,6 +202,7 @@ export function EmployeeDetailModal({
     setRoleIds(getUserRoleIds(row));
     setStatus(row.status);
     setSaved(false);
+    setPasswordReset(false);
     setRoleError("");
   }, [open, row]);
 
@@ -205,21 +229,47 @@ export function EmployeeDetailModal({
     setSaved(true);
   }
 
+  async function handleResetPassword() {
+    if (!row) return;
+    const ok = await confirm({
+      title: t("employees.resetPasswordConfirmTitle"),
+      message: t("employees.resetPasswordConfirm", {
+        name: row.name,
+        email: row.email,
+      }),
+      confirmLabel: t("employees.resetPassword"),
+      danger: true,
+    });
+    if (!ok) return;
+    resetPasswordToAccount(row.email);
+    setPasswordReset(true);
+    setSaved(false);
+  }
+
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title={row ? `${t("form.employeeDetail")} · ${row.name}` : t("form.employeeDetail")}
+      title={t("form.employeeDetail")}
       footer={
         row ? (
-          <>
-            <button type="button" className="ui-btn-secondary" onClick={onClose}>
-              {t("common.close")}
+          <div className="flex w-full items-center justify-between gap-3">
+            <button
+              type="button"
+              className="ui-btn-secondary h-8 px-3 text-xs text-muted hover:border-danger/35 hover:bg-red-50/60 hover:text-danger"
+              onClick={() => void handleResetPassword()}
+            >
+              {t("employees.resetPassword")}
             </button>
-            <button type="submit" form="employee-edit-form" className="ui-btn-primary">
-              {t("common.save")}
-            </button>
-          </>
+            <div className="flex items-center gap-2">
+              <button type="button" className="ui-btn-secondary" onClick={onClose}>
+                {t("common.close")}
+              </button>
+              <button type="submit" form="employee-edit-form" className="ui-btn-primary">
+                {t("common.save")}
+              </button>
+            </div>
+          </div>
         ) : (
           <button type="button" className="ui-btn-secondary" onClick={onClose}>
             {t("common.close")}
@@ -272,6 +322,9 @@ export function EmployeeDetailModal({
             </FormField>
           </FormFieldGrid>
           {saved ? <p className="text-sm text-success">{t("common.saved")}</p> : null}
+          {passwordReset ? (
+            <p className="text-sm text-success">{t("employees.resetPasswordSuccess")}</p>
+          ) : null}
         </form>
       )}
     </Modal>

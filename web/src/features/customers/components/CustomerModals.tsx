@@ -142,7 +142,7 @@ export function CustomerDetailModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={row ? `${t("form.customerDetail")} · ${row.name}` : t("form.customerDetail")}
+      title={t("form.customerDetail")}
       footer={
         row ? (
           <>

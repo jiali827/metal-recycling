@@ -238,7 +238,7 @@ export function PaymentCreateModal({
       }
     >
       <form id="payment-create-form" onSubmit={handleSubmit}>
-        <FormSection title={t("form.sectionBasic")}>
+        <FormSection title={isMisc ? t("form.sectionBasic") : undefined}>
           <FormFieldGrid>
             <FormField label={t("payments.colCategory")} required>
               <OptionField
@@ -473,11 +473,7 @@ export function PaymentDetailModal({
     <Modal
       open={open}
       onClose={onClose}
-      title={
-        row
-          ? `${t("form.paymentDetail")} · ${formatMoney(row.amount)}`
-          : t("form.paymentDetail")
-      }
+      title={t("form.paymentDetail")}
       size="lg"
       footer={
         row ? (
@@ -500,7 +496,7 @@ export function PaymentDetailModal({
         <p className="text-sm text-muted">{t("common.notFoundHint")}</p>
       ) : (
         <form id="payment-edit-form" onSubmit={handleSubmit}>
-          <FormSection title={t("form.sectionBasic")}>
+          <FormSection title={isMisc ? t("form.sectionBasic") : undefined}>
             <FormFieldGrid>
               <FormField label={t("payments.colCategory")} required>
                 <OptionField

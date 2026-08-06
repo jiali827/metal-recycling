@@ -6,12 +6,13 @@ export function FormSection({
   title,
   children,
 }: {
-  title: string;
+  /** 弹窗内仅一个分区时可省略，避免与弹窗标题重复 */
+  title?: string;
   children: ReactNode;
 }) {
   return (
-    <section className="ui-form-section">
-      <h3 className="ui-form-section-title">{title}</h3>
+    <section className={`ui-form-section${title ? "" : " is-plain"}`}>
+      {title ? <h3 className="ui-form-section-title">{title}</h3> : null}
       <div className="ui-form-section-body">{children}</div>
     </section>
   );
