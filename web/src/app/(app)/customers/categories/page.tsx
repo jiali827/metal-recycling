@@ -1,17 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ListPageLayout } from "@/components/layout/ListPageLayout";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { DataTable, type Column } from "@/components/ui/DataTable";
-import { PrimaryButton, RowActions } from "@/components/ui/CrudUi";
-import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { CustomerCategoryFormModal } from "@/components/entity/CustomerCategoryModals";
-import { deleteConfirmMessage } from "@/lib/confirm-delete";
-import { auditColumns, sortByCreatedAtDesc } from "@/lib/list-columns";
-import { useI18n } from "@/lib/i18n";
-import { useMockStore } from "@/lib/mock-store";
-import type { CustomerCategory } from "@/lib/types";
+import { ListPageLayout } from "@/shared/layout/ListPageLayout";
+import { PageHeader } from "@/shared/ui/PageHeader";
+import { DataTable, type Column } from "@/shared/ui/DataTable";
+import { PrimaryButton, RowActions } from "@/shared/ui/CrudUi";
+import { useConfirm } from "@/shared/ui/ConfirmDialog";
+import { CustomerCategoryFormModal } from "@/features/customers/components/CustomerCategoryModals";
+import { deleteConfirmMessage } from "@/shared/lib/confirm-delete";
+import { auditColumns, sortByCreatedAtDesc } from "@/shared/lib/list-columns";
+import { useI18n } from "@/shared/i18n";
+import { useMockStore } from "@/data/mock/store";
+import type { CustomerCategory } from "@/entities/types";
 
 export default function CustomerCategoriesPage() {
   const { t } = useI18n();

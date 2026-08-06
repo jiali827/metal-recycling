@@ -1,22 +1,22 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ListPageLayout } from "@/components/layout/ListPageLayout";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { DataTable, type Column } from "@/components/ui/DataTable";
-import { PrimaryButton, RowActions } from "@/components/ui/CrudUi";
-import { StatusBadge } from "@/components/ui/StatusBadge";
-import { useConfirm } from "@/components/ui/ConfirmDialog";
-import { RoleCreateModal, RoleDetailModal } from "@/components/entity/lazy-modals";
-import { roleDeleteConfirmMessage } from "@/lib/role-confirm";
-import { auditColumns, sortByCreatedAtDesc } from "@/lib/list-columns";
+import { ListPageLayout } from "@/shared/layout/ListPageLayout";
+import { PageHeader } from "@/shared/ui/PageHeader";
+import { DataTable, type Column } from "@/shared/ui/DataTable";
+import { PrimaryButton, RowActions } from "@/shared/ui/CrudUi";
+import { StatusBadge } from "@/shared/ui/StatusBadge";
+import { useConfirm } from "@/shared/ui/ConfirmDialog";
+import { RoleCreateModal, RoleDetailModal } from "@/features/lazy-modals";
+import { roleDeleteConfirmMessage } from "@/entities/role/confirm";
+import { auditColumns, sortByCreatedAtDesc } from "@/shared/lib/list-columns";
 import {
   localizeRoleName,
   localizeRolePermissions,
   useI18n,
-} from "@/lib/i18n";
-import { useMockStore } from "@/lib/mock-store";
-import type { RoleDef } from "@/lib/types";
+} from "@/shared/i18n";
+import { useMockStore } from "@/data/mock/store";
+import type { RoleDef } from "@/entities/types";
 
 export default function RolesPage() {
   const { t, locale } = useI18n();

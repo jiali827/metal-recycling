@@ -1,12 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { FormField, Select, inputClass } from "@/components/ui/CrudUi";
-import { CURRENCY_OPTIONS } from "@/lib/currency";
-import { formatMoney } from "@/lib/format";
-import { useI18n } from "@/lib/i18n";
-import { useMockStore } from "@/lib/mock-store";
+import { PageHeader } from "@/shared/ui/PageHeader";
+import { FormField, Select, inputClass } from "@/shared/ui/CrudUi";
+import { CURRENCY_OPTIONS } from "@/shared/lib/currency";
+import { formatMoney } from "@/shared/lib/format";
+import { useI18n } from "@/shared/i18n";
+import { useMockStore } from "@/data/mock/store";
 
 export default function CashSettingsPage() {
   const { t } = useI18n();

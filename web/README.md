@@ -1,8 +1,8 @@
-# 金屬回收管理系統 · 前端（一期首批）
+# 金屬回收管理系統 · 前端（一期）
 
-Next.js App Router + TypeScript + Tailwind，Mock 數據驅動的業務殼：登入/註冊後展示**全部模塊**列表與首頁總覽。角色菜單過濾後續由管理員配置，本期不做。
+Next.js App Router + TypeScript + Tailwind。按 **features / entities / data / shared** 分层，便于长期维护与后端接入。
 
-## 啟動
+## 启动
 
 ```bash
 cd web
@@ -10,41 +10,60 @@ npm install
 npm run dev
 ```
 
-打開 [http://localhost:3000](http://localhost:3000) → 進入**登入頁**。
+打开 [http://localhost:3000](http://localhost:3000) → 登录页。
 
-## 登入 / 註冊
+演示账号：`demo@baoxin.hk` / `demo1234`
 
-- `/login`：電郵 + 密碼（演示：任意非空即可）
-- `/register`：註冊開戶後直接進入系統
-- 登入後側欄可見全部業務頁；頂欄「退出登入」返回登入頁
+## 目录结构
 
-預填演示帳號：`demo@baoxin.hk` / `demo1234`
+```text
+src/
+├── app/                 # 路由壳（页面尽量薄）
+│   ├── (auth)/          # 登录 / 注册
+│   └── (app)/           # 业务页 + AppShell layout
+├── features/            # 按业务域组织的 UI（弹窗、视图、hooks）
+│   ├── contracts/
+│   ├── weigh-tickets/
+│   ├── payments/
+│   ├── settlements/
+│   ├── customers/
+│   ├── dashboard/
+│   └── …
+├── entities/            # 领域类型与纯业务规则（无 UI）
+│   ├── types.ts
+│   ├── contract/
+│   ├── settlement/
+│   ├── payment/
+│   └── …
+├── data/                # 数据访问
+│   ├── mock/            # 当前 Mock store + 种子数据
+│   └── client/          # 真实 API client 预留骨架
+└── shared/              # 跨域共享
+    ├── ui/              # 通用组件与表单控件
+    ├── layout/          # AppShell / Sidebar
+    ├── config/          # 菜单、权限、主题
+    ├── i18n/            # 繁/简/英
+    ├── lib/             # format / date / currency …
+    └── providers/
+```
 
-## 路由一覽
+### 分层约定
 
-- `/login` `/register`
-- `/dashboard` 經營 + 資金總覽
-- `/contracts` `/weigh-tickets`
-- `/receivables` `/payables` `/payments`
-- `/customers` `/material-types`
-- `/employees` `/roles`
-- `/settings/cash`
+| 层 | 职责 | 依赖方向 |
+|----|------|----------|
+| `app/` | 路由与页面组装 | → features / shared |
+| `features/` | 业务 UI | → entities / data / shared |
+| `entities/` | 领域模型与纯函数规则 | → shared（工具） |
+| `data/` | Mock 或 API | → entities |
+| `shared/` | 通用能力 | 不依赖 features |
 
-## 技術說明
+## 技术说明
 
-- 認證：`localStorage` Mock（`src/lib/auth-mock.tsx`）
-- 菜單：`src/lib/menu.ts`（全量展示，暫不按角色過濾）
-- 數據：`src/lib/mock/data.ts`
-
-## 操作說明
-
-各業務列表均支持：
-- **新建**：右上角按鈕進入表單
-- **詳情**：行內「詳情」
-- **刪除**：行內或詳情頁刪除（確認框；Mock 僅當前會話生效）
-
-基礎設置頁可編輯公司名與期初現金。
+- 认证：`features/auth/provider`（localStorage Mock）
+- 业务状态：`data/mock/store`（接 API 后替换为 `data/client`）
+- 菜单：`shared/config/menu.ts`
+- 权限矩阵：`shared/config/permissions.ts`
 
 ## 下一批
 
-真實 API、角色權限配置與菜單過濾、審計與作廢核銷規則。
+真实 API、角色菜单过滤、审计与作废核销规则完善。

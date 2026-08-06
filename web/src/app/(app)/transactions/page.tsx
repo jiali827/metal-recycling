@@ -2,27 +2,27 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft } from "@phosphor-icons/react";
-import { ContractTracePanel } from "@/components/entity/ContractTracePanel";
-import { PageHeader } from "@/components/ui/PageHeader";
+import { ContractTracePanel } from "@/features/contracts/components/ContractTracePanel";
+import { PageHeader } from "@/shared/ui/PageHeader";
 import {
   FilterBar,
   FilterField,
   filterControlClass,
-} from "@/components/ui/FilterBar";
-import { Select } from "@/components/ui/CrudUi";
-import { SegmentedControl } from "@/components/ui/forms/SegmentedControl";
-import { StatusBadge } from "@/components/ui/StatusBadge";
-import { contractStatusTone } from "@/lib/contract-status";
+} from "@/shared/ui/FilterBar";
+import { Select } from "@/shared/ui/CrudUi";
+import { SegmentedControl } from "@/shared/ui/forms/SegmentedControl";
+import { StatusBadge } from "@/shared/ui/StatusBadge";
+import { contractStatusTone } from "@/entities/contract/status";
 import {
   DIRECTION_PURCHASE_COLOR,
   DIRECTION_SALE_COLOR,
-} from "@/lib/direction-colors";
-import { formatMoney } from "@/lib/format";
-import { useI18n } from "@/lib/i18n";
-import { contractStatusLabel } from "@/lib/i18n/labels";
-import { useMockStore } from "@/lib/mock-store";
-import { buildContractTraces, type ContractTrace } from "@/lib/transaction-trace";
-import type { ContractType } from "@/lib/types";
+} from "@/shared/lib/direction-colors";
+import { formatMoney } from "@/shared/lib/format";
+import { useI18n } from "@/shared/i18n";
+import { contractStatusLabel } from "@/shared/i18n/labels";
+import { useMockStore } from "@/data/mock/store";
+import { buildContractTraces, type ContractTrace } from "@/entities/transaction/trace";
+import type { ContractType } from "@/entities/types";
 
 type TypeTab = "all" | ContractType;
 

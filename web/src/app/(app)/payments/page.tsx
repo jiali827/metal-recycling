@@ -9,32 +9,32 @@ import {
   CurrencyCircleDollar,
   Wallet,
 } from "@phosphor-icons/react";
-import { ListPageLayout } from "@/components/layout/ListPageLayout";
-import { PageHeader } from "@/components/ui/PageHeader";
-import { DataTable, type Column } from "@/components/ui/DataTable";
-import { StatCard } from "@/components/ui/StatCard";
-import { StatusBadge } from "@/components/ui/StatusBadge";
+import { ListPageLayout } from "@/shared/layout/ListPageLayout";
+import { PageHeader } from "@/shared/ui/PageHeader";
+import { DataTable, type Column } from "@/shared/ui/DataTable";
+import { StatCard } from "@/shared/ui/StatCard";
+import { StatusBadge } from "@/shared/ui/StatusBadge";
 import {
   FilterBar,
   FilterField,
   filterControlClass,
-} from "@/components/ui/FilterBar";
-import { PrimaryButton, RowActions, Select } from "@/components/ui/CrudUi";
-import { useConfirm } from "@/components/ui/ConfirmDialog";
+} from "@/shared/ui/FilterBar";
+import { PrimaryButton, RowActions, Select } from "@/shared/ui/CrudUi";
+import { useConfirm } from "@/shared/ui/ConfirmDialog";
 import {
   PaymentCreateModal,
   PaymentDetailModal,
-} from "@/components/entity/lazy-modals";
-import { deleteConfirmMessage } from "@/lib/confirm-delete";
-import { formatMoney } from "@/lib/format";
-import { formatWeighDateTime } from "@/lib/date";
-import { auditColumns, sortByCreatedAtDesc } from "@/lib/list-columns";
-import { isMiscPayment } from "@/lib/payment-meta";
-import { aggregatePaymentStructure } from "@/lib/payment-structure";
-import { paymentTicketBxNo } from "@/lib/settlement";
-import { localizeMiscKind, useI18n } from "@/lib/i18n";
-import { useMockStore } from "@/lib/mock-store";
-import type { PaymentRecord } from "@/lib/types";
+} from "@/features/lazy-modals";
+import { deleteConfirmMessage } from "@/shared/lib/confirm-delete";
+import { formatMoney } from "@/shared/lib/format";
+import { formatWeighDateTime } from "@/shared/lib/date";
+import { auditColumns, sortByCreatedAtDesc } from "@/shared/lib/list-columns";
+import { isMiscPayment } from "@/entities/payment/meta";
+import { aggregatePaymentStructure } from "@/entities/payment/structure";
+import { paymentTicketBxNo } from "@/entities/settlement";
+import { localizeMiscKind, useI18n } from "@/shared/i18n";
+import { useMockStore } from "@/data/mock/store";
+import type { PaymentRecord } from "@/entities/types";
 
 const SUMMARY_EXPANDED_KEY = "bx-payments-summary-expanded";
 

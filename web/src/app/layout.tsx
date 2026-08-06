@@ -1,11 +1,11 @@
 import type { Metadata } from "next";
-import { AuthProvider } from "@/lib/auth-mock";
-import { MockStoreProvider } from "@/lib/mock-store";
-import { I18nProvider } from "@/lib/i18n";
-import { ThemeProvider } from "@/lib/theme-provider";
-import { THEME_BOOT_SCRIPT } from "@/lib/theme";
-import { ConfirmProvider } from "@/components/ui/ConfirmDialog";
-import { TextInputCaretEnd } from "@/components/ui/TextInputCaretEnd";
+import { AuthProvider } from "@/features/auth/provider";
+import { MockStoreProvider } from "@/data/mock/store";
+import { I18nProvider } from "@/shared/i18n";
+import { ThemeProvider } from "@/shared/providers/theme-provider";
+import { THEME_BOOT_SCRIPT } from "@/shared/config/theme";
+import { ConfirmProvider } from "@/shared/ui/ConfirmDialog";
+import { TextInputCaretEnd } from "@/shared/ui/TextInputCaretEnd";
 import "./globals.css";
 
 export const metadata: Metadata = {
