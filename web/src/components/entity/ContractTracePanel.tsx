@@ -20,24 +20,98 @@ import {
 } from "@/components/entity/WeighTicketModals";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { TableScrollArea } from "@/components/ui/TableScrollArea";
+import { contractStatusTone } from "@/lib/contract-status";
+import {
+  DIRECTION_PURCHASE_COLOR,
+  DIRECTION_SALE_COLOR,
+} from "@/lib/direction-colors";
 import { deleteConfirmMessage } from "@/lib/confirm-delete";
 import { formatKg, formatMoney } from "@/lib/format";
 import { formatWeighDateTime } from "@/lib/date";
-import { useI18n, localizeAllocationSummary } from "@/lib/i18n";
+import { localizeMiscKind, useI18n } from "@/lib/i18n";
 import {
   contractStatusLabel,
+  fieldLabels,
   ticketStatusLabel,
 } from "@/lib/i18n/labels";
+import { isMiscPayment } from "@/lib/payment-meta";
+import { paymentTicketBxNo } from "@/lib/settlement";
 import { useMockStore } from "@/lib/mock-store";
 import type { ContractTrace } from "@/lib/transaction-trace";
 
-type DetailTab = "contract" | "customer" | "weigh" | "payment";
+type DetailTab = "basic" | "weigh" | "payment";
+
+function formatPaymentMethod(
+  method: string,
+  t: ReturnType<typeof useI18n>["t"],
+) {
+  if (method === "現金" || method === "现金") return t("form.methodCash");
+  if (method === "支票") return t("form.methodCheque");
+  if (method === "轉賬" || method === "转账") return t("form.methodTransfer");
+  return method;
+}
+
+function TraceInfoBlock({
+  title,
+  children,
+  className = "",
+}: {
+  title: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <section className={className}>
+      <h4 className="mb-2.5 text-xs font-medium text-muted">{title}</h4>
+      {children}
+    </section>
+  );
+}
+
+function BasicInfoToolbar({
+  onEditContract,
+  onEditCustomer,
+  hasCustomer,
+}: {
+  onEditContract: () => void;
+  onEditCustomer: () => void;
+  hasCustomer: boolean;
+}) {
+  const { t } = useI18n();
+  const actionClass =
+    "inline-flex h-8 items-center gap-1 rounded-[var(--radius-control)] px-2 text-xs font-medium text-brand transition hover:bg-brand-soft";
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex items-center gap-2">
+        <FileText size={18} weight="regular" className="shrink-0 text-foreground" />
+        <h3 className="text-sm font-semibold text-foreground">
+          {t("form.sectionBasic")}
+        </h3>
+      </div>
+      <div className="flex flex-wrap items-center gap-1">
+        <button type="button" onClick={onEditContract} className={actionClass}>
+          <PencilSimple size={14} />
+          {t("transactions.contractSection")}
+        </button>
+        {hasCustomer ? (
+          <button type="button" onClick={onEditCustomer} className={actionClass}>
+            <UserCircle size={14} />
+            {t("transactions.customerSection")}
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
 
 function TraceStep({
+  step,
   label,
   done,
   active,
 }: {
+  step: number;
   label: string;
   done: boolean;
   active?: boolean;
@@ -45,7 +119,7 @@ function TraceStep({
   return (
     <div className="flex min-w-0 flex-1 flex-col items-center gap-1">
       <div
-        className={`flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-semibold ${
+        className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums ${
           done
             ? "bg-brand text-white"
             : active
@@ -53,7 +127,7 @@ function TraceStep({
               : "bg-chip text-muted"
         }`}
       >
-        {done ? "✓" : "·"}
+        {step}
       </div>
       <span
         className={`max-w-full truncate text-center text-[10px] ${
@@ -82,9 +156,7 @@ function TabPanelToolbar({
   const { t } = useI18n();
   return (
     <div className={`flex items-center gap-2 ${embedded ? "" : "mb-4"}`}>
-      <span className="flex h-8 w-8 items-center justify-center rounded-[var(--radius-control)] bg-brand-soft text-brand">
-        {icon}
-      </span>
+      <span className="shrink-0 text-foreground">{icon}</span>
       <h3 className="text-sm font-semibold text-foreground">{title}</h3>
       <div className="ml-auto flex items-center gap-1">
         {onEdit ? (
@@ -123,13 +195,13 @@ function TabContentCard({
 }) {
   return (
     <div className="overflow-hidden rounded-[var(--radius-card)] border border-border bg-card">
-      <div className="border-b border-border px-4 py-3">{toolbar}</div>
-      <div className={flush ? "" : "px-1 py-1 sm:px-2"}>{children}</div>
+      <div className="border-b border-border px-3 py-2.5">{toolbar}</div>
+      <div className={flush ? "" : "px-3 py-3"}>{children}</div>
     </div>
   );
 }
 
-/** Read-only field: quiet label + value, no chip cards */
+/** Read-only field: label left, value right within a compact row */
 function InfoCell({
   label,
   children,
@@ -140,9 +212,9 @@ function InfoCell({
   className?: string;
 }) {
   return (
-    <div className={`px-3 py-3 ${className}`}>
-      <dt className="text-xs text-muted">{label}</dt>
-      <dd className="mt-1.5 text-sm font-medium leading-snug text-foreground">
+    <div className={`flex min-h-9 items-baseline gap-3 py-1.5 ${className}`}>
+      <dt className="w-[6.75rem] shrink-0 text-xs text-muted">{label}</dt>
+      <dd className="min-w-0 text-sm font-medium leading-snug text-foreground">
         {children}
       </dd>
     </div>
@@ -151,9 +223,7 @@ function InfoCell({
 
 function InfoGrid({ children }: { children: ReactNode }) {
   return (
-    <dl className="grid sm:grid-cols-2 sm:gap-x-6 [&>*]:border-b [&>*]:border-border/70">
-      {children}
-    </dl>
+    <dl className="grid gap-x-8 sm:grid-cols-2">{children}</dl>
   );
 }
 
@@ -206,7 +276,7 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
 
   const { contract, customer, tickets, settlements, payments, summary } = trace;
 
-  const [activeTab, setActiveTab] = useState<DetailTab>("contract");
+  const [activeTab, setActiveTab] = useState<DetailTab>("basic");
   const [contractEditOpen, setContractEditOpen] = useState(false);
   const [customerEditId, setCustomerEditId] = useState<string | null>(null);
   const [ticketCreateOpen, setTicketCreateOpen] = useState(false);
@@ -215,7 +285,7 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
   const [paymentEditId, setPaymentEditId] = useState<string | null>(null);
 
   useEffect(() => {
-    setActiveTab("contract");
+    setActiveTab("basic");
   }, [contract.id]);
 
   const ticketPreset = useMemo(
@@ -251,8 +321,7 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
   const tabs = useMemo(
     () =>
       [
-        { id: "contract" as const, label: t("transactions.contractSection") },
-        { id: "customer" as const, label: t("transactions.customerSection") },
+        { id: "basic" as const, label: t("form.sectionBasic") },
         {
           id: "weigh" as const,
           label: t("transactions.weighSection"),
@@ -274,19 +343,21 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
 
   return (
     <>
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div className="ui-card overflow-hidden">
-          <div className="border-b border-border bg-gradient-to-r from-brand-soft/40 to-card px-5 py-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="border-b border-border bg-gradient-to-r from-brand-soft/40 to-card px-4 py-3">
+          <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-lg font-semibold tracking-tight text-foreground">
+                <h2 className="text-base font-semibold tracking-tight text-foreground">
                   {contract.no}
                 </h2>
                 <StatusBadge tone={contract.type === "purchase" ? "info" : "accent"}>
                   {contract.type === "purchase" ? t("common.purchase") : t("common.sale")}
                 </StatusBadge>
-                <StatusBadge>{contractStatusLabel[contract.status]}</StatusBadge>
+                <StatusBadge tone={contractStatusTone(contract.status)}>
+                  {contractStatusLabel[contract.status]}
+                </StatusBadge>
               </div>
               <p className="mt-1 text-sm text-muted">{contract.customerName}</p>
             </div>
@@ -298,16 +369,18 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
             </div>
           </div>
 
-          <div className="mt-4 flex items-center gap-2">
-            <TraceStep label={t("transactions.stepContract")} done />
+          <div className="mt-3 flex items-center gap-2">
+            <TraceStep step={1} label={t("transactions.stepContract")} done />
             <div className="h-px flex-1 bg-border" />
             <TraceStep
+              step={2}
               label={t("transactions.stepWeigh")}
               done={hasWeigh}
               active={!hasWeigh}
             />
             <div className="h-px flex-1 bg-border" />
             <TraceStep
+              step={3}
               label={t("transactions.stepPayment")}
               done={allSettled || hasPayment}
               active={hasWeigh && !hasPayment}
@@ -327,10 +400,10 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
           ].map((item, i) => (
             <div
               key={item.label}
-              className={`px-4 py-3 ${i > 0 ? "border-l border-border" : ""}`}
+              className={`px-3 py-2.5 ${i > 0 ? "border-l border-border" : ""}`}
             >
-              <div className="text-[11px] text-muted">{item.label}</div>
-              <div className="mt-0.5 text-base font-semibold tabular-nums text-foreground">
+              <div className="text-[10px] text-muted">{item.label}</div>
+              <div className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">
                 {item.value}
               </div>
             </div>
@@ -374,109 +447,105 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
           })}
           </div>
 
-          <div className="pt-4" role="tabpanel">
-          {activeTab === "contract" ? (
+          <div className="pt-3" role="tabpanel">
+          {activeTab === "basic" ? (
+            <div className="w-full max-w-3xl">
             <TabContentCard
               toolbar={
-                <TabPanelToolbar
-                  embedded
-                  title={t("transactions.contractSection")}
-                  icon={<FileText size={18} weight="duotone" />}
-                  onEdit={() => setContractEditOpen(true)}
+                <BasicInfoToolbar
+                  onEditContract={() => setContractEditOpen(true)}
+                  onEditCustomer={() => setCustomerEditId(customer!.id)}
+                  hasCustomer={Boolean(customer)}
                 />
               }
             >
-              <InfoGrid>
-                <InfoCell label={t("fields.contractNo")}>{contract.no}</InfoCell>
-                <InfoCell label={t("fields.signedDate")}>{contract.date}</InfoCell>
-                <InfoCell label={t("common.type")}>
-                  {contract.type === "purchase" ? t("common.purchase") : t("common.sale")}
-                </InfoCell>
-                <InfoCell label={t("transactions.contractStatus")}>
-                  {contractStatusLabel[contract.status]}
-                </InfoCell>
-                <InfoCell label={t("contracts.colPlanned")}>
-                  {formatKg(contract.plannedKg)}
-                </InfoCell>
-                <InfoCell label={t("contracts.colFulfilled")}>
-                  {formatKg(contract.fulfilledKg)}
-                </InfoCell>
-                <InfoCell label={t("transactions.remainingWeight")}>
-                  {formatKg(remainingKg)}
-                </InfoCell>
-                <InfoCell label={t("transactions.fulfillment")}>
-                  <div className="flex items-center gap-2.5 pt-0.5">
-                    <div className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-chip">
-                      <div
-                        className="h-full rounded-full bg-brand transition-all"
-                        style={{ width: `${Math.min(100, summary.fulfillmentPct)}%` }}
-                      />
-                    </div>
-                    <span className="shrink-0 tabular-nums text-brand">
-                      {summary.fulfillmentPct.toFixed(0)}%
-                    </span>
-                  </div>
-                </InfoCell>
-                <InfoCell label={t("contracts.colPrice")} className="sm:col-span-2">
-                  {contract.unitPriceSummary}
-                </InfoCell>
-                {contract.attachmentName ? (
-                  <InfoCell label={t("transactions.contractAttachment")} className="sm:col-span-2">
-                    {contract.attachmentName}
-                  </InfoCell>
-                ) : null}
-              </InfoGrid>
-            </TabContentCard>
-          ) : null}
+              <div className="space-y-5">
+                <TraceInfoBlock title={t("transactions.contractSection")}>
+                  <InfoGrid>
+                    <InfoCell label={t("fields.contractNo")}>{contract.no}</InfoCell>
+                    <InfoCell label={t("fields.signedDate")}>{contract.date}</InfoCell>
+                    <InfoCell label={t("common.type")}>
+                      {contract.type === "purchase"
+                        ? t("common.purchase")
+                        : t("common.sale")}
+                    </InfoCell>
+                    <InfoCell label={t("transactions.contractStatus")}>
+                      {contractStatusLabel[contract.status]}
+                    </InfoCell>
+                    <InfoCell label={t("contracts.colPlanned")}>
+                      {formatKg(contract.plannedKg)}
+                    </InfoCell>
+                    <InfoCell label={t("contracts.colFulfilled")}>
+                      {formatKg(contract.fulfilledKg)}
+                    </InfoCell>
+                    <InfoCell label={t("transactions.remainingWeight")}>
+                      {formatKg(remainingKg)}
+                    </InfoCell>
+                    <InfoCell label={t("contracts.colPrice")}>
+                      {contract.unitPriceSummary}
+                    </InfoCell>
+                    <InfoCell label={t("transactions.fulfillment")}>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-chip">
+                          <div
+                            className="h-full rounded-full transition-all"
+                            style={{
+                              width: `${Math.min(100, summary.fulfillmentPct)}%`,
+                              backgroundColor:
+                                contract.type === "purchase"
+                                  ? DIRECTION_PURCHASE_COLOR
+                                  : DIRECTION_SALE_COLOR,
+                            }}
+                          />
+                        </div>
+                        <span className="shrink-0 text-xs font-semibold tabular-nums text-brand">
+                          {summary.fulfillmentPct.toFixed(0)}%
+                        </span>
+                      </div>
+                    </InfoCell>
+                    {contract.attachmentName ? (
+                      <InfoCell label={t("transactions.contractAttachment")}>
+                        <span className="truncate">{contract.attachmentName}</span>
+                      </InfoCell>
+                    ) : null}
+                  </InfoGrid>
+                </TraceInfoBlock>
 
-          {activeTab === "customer" ? (
-            <TabContentCard
-              toolbar={
-                <TabPanelToolbar
-                  embedded
+                <TraceInfoBlock
                   title={t("transactions.customerSection")}
-                  icon={<UserCircle size={18} weight="duotone" />}
-                  onEdit={customer ? () => setCustomerEditId(customer.id) : undefined}
-                />
-              }
-            >
-              {!customer ? (
-                <div className="rounded-[var(--radius-control)] border border-dashed border-border bg-chip/30 px-4 py-10 text-center">
-                  <p className="text-sm text-muted">{t("transactions.customerLinkHint")}</p>
-                  <button
-                    type="button"
-                    className="ui-btn-primary mt-4 text-sm"
-                    onClick={() => {
-                      setActiveTab("contract");
-                      setContractEditOpen(true);
-                    }}
-                  >
-                    {t("transactions.customerLinkAction")}
-                  </button>
-                </div>
-              ) : (
-                <InfoGrid>
-                  <InfoCell label={t("common.name")}>{customer.name}</InfoCell>
-                  <InfoCell label={t("common.category")}>{customer.category}</InfoCell>
-                  <InfoCell label={t("common.contact")}>{customer.contact ?? "-"}</InfoCell>
-                  <InfoCell label={t("transactions.relatedContractCount")}>
-                    {customerContractCount}
-                  </InfoCell>
-                  <InfoCell label={t("transactions.ticketCount")}>
-                    {summary.normalTicketCount}
-                  </InfoCell>
-                  <InfoCell label={t("transactions.totalAmount")}>
-                    {formatMoney(summary.totalAmount)}
-                  </InfoCell>
-                  <InfoCell label={t("transactions.balance")}>
-                    {formatMoney(summary.balance)}
-                  </InfoCell>
-                  <InfoCell label={t("form.counterpartyCustomer")} className="sm:col-span-2">
-                    {contract.customerName}
-                  </InfoCell>
-                </InfoGrid>
-              )}
+                  className="border-t border-border/60 pt-5"
+                >
+                  {!customer ? (
+                    <div className="rounded-[var(--radius-control)] border border-dashed border-border bg-chip/30 px-3 py-6 text-center">
+                      <p className="text-sm text-muted">
+                        {t("transactions.customerLinkHint")}
+                      </p>
+                      <button
+                        type="button"
+                        className="ui-btn-primary mt-4 text-sm"
+                        onClick={() => setContractEditOpen(true)}
+                      >
+                        {t("transactions.customerLinkAction")}
+                      </button>
+                    </div>
+                  ) : (
+                    <InfoGrid>
+                      <InfoCell label={t("common.name")}>{customer.name}</InfoCell>
+                      <InfoCell label={t("common.category")}>
+                        {customer.category}
+                      </InfoCell>
+                      <InfoCell label={t("common.contact")}>
+                        {customer.contact ?? "-"}
+                      </InfoCell>
+                      <InfoCell label={t("transactions.relatedContractCount")}>
+                        {customerContractCount}
+                      </InfoCell>
+                    </InfoGrid>
+                  )}
+                </TraceInfoBlock>
+              </div>
             </TabContentCard>
+            </div>
           ) : null}
 
           {activeTab === "weigh" ? (
@@ -486,7 +555,7 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
                 <TabPanelToolbar
                   embedded
                   title={t("transactions.weighSection")}
-                  icon={<Scales size={18} weight="duotone" />}
+                  icon={<Scales size={18} weight="regular" className="text-foreground" />}
                   onAdd={() => setTicketCreateOpen(true)}
                 />
               }
@@ -499,17 +568,23 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
                 <TableScrollArea>
                   <table className="ui-table-hover-soft min-w-full text-sm">
                     <thead>
-                      <tr className="border-b border-border bg-chip/50 text-left text-xs text-muted">
-                        <th className="px-4 py-2.5 font-semibold">{t("fields.bxNo")}</th>
-                        <th className="py-2.5 pr-3 font-semibold">{t("common.date")}</th>
-                        <th className="py-2.5 pr-3 font-semibold">{t("fields.plate")}</th>
+                      <tr className="border-b border-border bg-chip text-left text-xs text-muted">
+                        <th className="px-4 py-2.5 font-semibold">{fieldLabels.bxNo}</th>
+                        <th className="py-2.5 pr-3 font-semibold">{fieldLabels.direction}</th>
+                        <th className="py-2.5 pr-3 font-semibold">
+                          {t("fields.weighDateTime")}
+                        </th>
+                        <th className="py-2.5 pr-3 font-semibold">{fieldLabels.customer}</th>
+                        <th className="py-2.5 pr-3 font-semibold">{fieldLabels.plate}</th>
+                        <th className="py-2.5 pr-3 font-semibold">{fieldLabels.material}</th>
                         <th className="py-2.5 pr-3 text-right font-semibold">
-                          {t("fields.net")}
+                          {fieldLabels.net}
                         </th>
                         <th className="py-2.5 pr-3 text-right font-semibold">
-                          {t("fields.amount")}
+                          {fieldLabels.amount}
                         </th>
-                        <th className="py-2.5 pr-3 font-semibold">{t("common.status")}</th>
+                        <th className="py-2.5 pr-3 font-semibold">{fieldLabels.contractNo}</th>
+                        <th className="py-2.5 pr-3 font-semibold">{fieldLabels.status}</th>
                         <th className="ui-table-sticky-right px-4 py-2.5 text-right font-semibold">
                           {t("common.actions")}
                         </th>
@@ -522,16 +597,30 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
                           className="border-b border-border/50 last:border-0"
                         >
                           <td className="px-4 py-2.5 font-medium tabular-nums">
-                            BX{ticket.bxNo}
+                            {ticket.bxNo}
                           </td>
-                          <td className="py-2.5 pr-3">{formatWeighDateTime(ticket.date)}</td>
+                          <td className="py-2.5 pr-3">
+                            <StatusBadge
+                              tone={ticket.direction === "purchase" ? "info" : "accent"}
+                            >
+                              {ticket.direction === "purchase"
+                                ? t("common.purchase")
+                                : t("common.sale")}
+                            </StatusBadge>
+                          </td>
+                          <td className="py-2.5 pr-3">
+                            {formatWeighDateTime(ticket.date)}
+                          </td>
+                          <td className="py-2.5 pr-3">{ticket.customerName}</td>
                           <td className="py-2.5 pr-3">{ticket.plate}</td>
+                          <td className="py-2.5 pr-3">{ticket.materialSummary}</td>
                           <td className="py-2.5 pr-3 text-right tabular-nums">
                             {formatKg(ticket.netKg)}
                           </td>
                           <td className="py-2.5 pr-3 text-right tabular-nums">
                             {formatMoney(ticket.amount)}
                           </td>
+                          <td className="py-2.5 pr-3">{ticket.contractNo}</td>
                           <td className="py-2.5 pr-3">
                             <StatusBadge
                               tone={ticket.status === "void" ? "danger" : "success"}
@@ -565,7 +654,7 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
                 <TabPanelToolbar
                   embedded
                   title={t("transactions.paymentSection")}
-                  icon={<ArrowsLeftRight size={18} weight="duotone" />}
+                  icon={<ArrowsLeftRight size={18} weight="regular" className="text-foreground" />}
                   onAdd={() => setPaymentCreateOpen(true)}
                 />
               }
@@ -578,52 +667,89 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
                 <TableScrollArea>
                   <table className="ui-table-hover-soft min-w-full text-sm">
                     <thead>
-                      <tr className="border-b border-border bg-chip/50 text-left text-xs text-muted">
-                        <th className="px-4 py-2.5 font-semibold">{t("common.date")}</th>
+                      <tr className="border-b border-border bg-chip text-left text-xs text-muted">
+                        <th className="px-4 py-2.5 font-semibold">
+                          {t("fields.paymentDateTime")}
+                        </th>
+                        <th className="py-2.5 pr-3 font-semibold">
+                          {t("payments.colCategory")}
+                        </th>
                         <th className="py-2.5 pr-3 font-semibold">{t("common.type")}</th>
+                        <th className="py-2.5 pr-3 font-semibold">
+                          {t("payments.colMiscKind")}
+                        </th>
+                        <th className="py-2.5 pr-3 font-semibold">
+                          {t("form.relatedTicket")}
+                        </th>
+                        <th className="py-2.5 pr-3 font-semibold">{t("form.colMethod")}</th>
                         <th className="py-2.5 pr-3 text-right font-semibold">
                           {t("fields.amount")}
                         </th>
-                        <th className="py-2.5 pr-3 font-semibold">
-                          {t("transactions.allocation")}
-                        </th>
+                        <th className="py-2.5 pr-3 font-semibold">{t("form.colParty")}</th>
                         <th className="ui-table-sticky-right px-4 py-2.5 text-right font-semibold">
                           {t("common.actions")}
                         </th>
                       </tr>
                     </thead>
                     <tbody className="bg-card">
-                      {payments.map((p) => (
-                        <tr
-                          key={p.id}
-                          className="border-b border-border/50 last:border-0"
-                        >
-                          <td className="px-4 py-2.5">{formatWeighDateTime(p.date)}</td>
-                          <td className="py-2.5 pr-3">
-                            <StatusBadge tone={p.type === "receipt" ? "success" : "warning"}>
-                              {p.type === "receipt"
-                                ? t("common.receipt")
-                                : t("common.payment")}
-                            </StatusBadge>
-                          </td>
-                          <td className="py-2.5 pr-3 text-right tabular-nums">
-                            {formatMoney(p.amount)}
-                          </td>
-                          <td className="py-2.5 pr-3 text-muted">
-                            {localizeAllocationSummary(p.allocationSummary)}
-                          </td>
-                          <td className="ui-table-sticky-right px-4 py-2.5">
-                            <RowActionButtons
-                              onEdit={() => setPaymentEditId(p.id)}
-                              onDelete={() =>
-                                void confirmDelete(formatMoney(p.amount), () =>
-                                  removePayment(p.id),
-                                )
-                              }
-                            />
-                          </td>
-                        </tr>
-                      ))}
+                      {payments.map((p) => {
+                        const ticketBx = paymentTicketBxNo(p);
+                        return (
+                          <tr
+                            key={p.id}
+                            className="border-b border-border/50 last:border-0"
+                          >
+                            <td className="px-4 py-2.5">
+                              {formatWeighDateTime(p.date)}
+                            </td>
+                            <td className="py-2.5 pr-3">
+                              <StatusBadge tone={isMiscPayment(p) ? "info" : "default"}>
+                                {isMiscPayment(p)
+                                  ? t("payments.categoryMisc")
+                                  : t("payments.categorySettlement")}
+                              </StatusBadge>
+                            </td>
+                            <td className="py-2.5 pr-3">
+                              <StatusBadge tone={p.type === "receipt" ? "success" : "warning"}>
+                                {p.type === "receipt"
+                                  ? t("common.receipt")
+                                  : t("common.payment")}
+                              </StatusBadge>
+                            </td>
+                            <td className="py-2.5 pr-3">
+                              {p.miscKind ? (
+                                <span className="text-sm">{localizeMiscKind(p.miscKind)}</span>
+                              ) : (
+                                <span className="text-muted">-</span>
+                              )}
+                            </td>
+                            <td className="py-2.5 pr-3">
+                              {ticketBx ? (
+                                <span className="font-medium tabular-nums">BX{ticketBx}</span>
+                              ) : (
+                                <span className="text-muted">-</span>
+                              )}
+                            </td>
+                            <td className="py-2.5 pr-3">
+                              {formatPaymentMethod(p.method, t)}
+                            </td>
+                            <td className="py-2.5 pr-3 text-right tabular-nums">
+                              <span className="font-medium">{formatMoney(p.amount)}</span>
+                            </td>
+                            <td className="py-2.5 pr-3">{p.counterparty}</td>
+                            <td className="ui-table-sticky-right px-4 py-2.5">
+                              <RowActionButtons
+                                onEdit={() => setPaymentEditId(p.id)}
+                                onDelete={() =>
+                                  void confirmDelete(formatMoney(p.amount), () =>
+                                    removePayment(p.id),
+                                  )
+                                }
+                              />
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </TableScrollArea>

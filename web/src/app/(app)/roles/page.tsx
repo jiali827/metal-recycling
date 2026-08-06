@@ -45,11 +45,6 @@ export default function RolesPage() {
       ),
     },
     {
-      key: "id",
-      header: t("form.colRoleCode"),
-      render: (r) => <span className="tabular-nums text-muted">{r.id}</span>,
-    },
-    {
       key: "status",
       header: t("form.enabledStatus"),
       render: (r) => (

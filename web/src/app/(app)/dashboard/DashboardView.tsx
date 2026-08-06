@@ -19,6 +19,12 @@ import { DataTable, type Column } from "@/components/ui/DataTable";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { DateRangePicker, SegmentedControl } from "@/components/ui/CrudUi";
 import { DashReveal } from "@/lib/dashboard-motion";
+import {
+  DIRECTION_PURCHASE_COLOR,
+  DIRECTION_PURCHASE_FILL,
+  DIRECTION_SALE_COLOR,
+  DIRECTION_SALE_FILL,
+} from "@/lib/direction-colors";
 import { formatKg, formatMoney } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { useMockStore } from "@/lib/mock-store";
@@ -189,14 +195,14 @@ function LineChart({
       <path
         className="dash-line-area"
         d={areaFor(sales)}
-        fill="rgb(99 102 241 / 0.1)"
+        fill={DIRECTION_SALE_FILL}
       />
       <path
         className="dash-line-draw"
         pathLength={1}
         d={pathFor(sales)}
         fill="none"
-        stroke="var(--brand)"
+        stroke={DIRECTION_SALE_COLOR}
         strokeWidth={stroke}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -206,7 +212,7 @@ function LineChart({
         pathLength={1}
         d={pathFor(purchases)}
         fill="none"
-        stroke="var(--accent-hot)"
+        stroke={DIRECTION_PURCHASE_COLOR}
         strokeWidth={stroke}
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -219,7 +225,7 @@ function LineChart({
           cx={toX(i)}
           cy={toY(v)}
           r={dotR}
-          fill="var(--brand)"
+          fill={DIRECTION_SALE_COLOR}
           style={{ animationDelay: `${0.45 + Math.min(i, 20) * 0.03}s` }}
         />
       ))}
@@ -230,7 +236,7 @@ function LineChart({
           cx={toX(i)}
           cy={toY(v)}
           r={dotR}
-          fill="var(--accent-hot)"
+          fill={DIRECTION_PURCHASE_COLOR}
           style={{ animationDelay: `${0.55 + Math.min(i, 20) * 0.03}s` }}
         />
       ))}
@@ -382,9 +388,9 @@ function MaterialPieChart({
   return (
     <div
       key={replayKey}
-      className="flex h-full min-h-[180px] flex-col items-center gap-3 sm:flex-row sm:items-center sm:justify-center sm:gap-4"
+      className="flex h-full min-h-[220px] flex-col items-center justify-center gap-4 sm:flex-row sm:items-center sm:justify-center sm:gap-6"
     >
-      <div className="relative aspect-square w-[140px] shrink-0">
+      <div className="relative aspect-square w-[188px] shrink-0 sm:w-[200px]">
         <svg
           viewBox="0 0 100 100"
           className="h-full w-full"
@@ -412,20 +418,20 @@ function MaterialPieChart({
             />
           ))}
         </svg>
-        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-3 text-center">
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center px-4 text-center">
           {active ? (
             <>
-              <span className="max-w-[88px] truncate text-[10px] text-muted">
+              <span className="max-w-[7.5rem] truncate text-xs text-muted">
                 {active.label}
               </span>
-              <span className="mt-0.5 text-sm font-semibold tabular-nums text-foreground">
+              <span className="mt-0.5 text-base font-semibold tabular-nums text-foreground">
                 {active.pct.toFixed(1)}%
               </span>
             </>
           ) : (
             <>
-              <span className="text-[10px] text-muted">{totalLabel}</span>
-              <span className="mt-0.5 max-w-[96px] truncate text-sm font-semibold tabular-nums text-foreground">
+              <span className="text-xs text-muted">{totalLabel}</span>
+              <span className="mt-0.5 max-w-[7.5rem] text-base font-semibold leading-tight tabular-nums text-foreground">
                 {formatValue(total)}
               </span>
             </>
@@ -433,7 +439,7 @@ function MaterialPieChart({
         </div>
       </div>
 
-      <ul className="w-max max-w-[9.5rem] shrink-0 space-y-1">
+      <ul className="w-max max-w-[11rem] shrink-0 space-y-1.5">
         {arcs.map((arc, i) => (
           <li
             key={arc.label}
@@ -448,10 +454,10 @@ function MaterialPieChart({
               className="h-2 w-2 shrink-0 rounded-[2px]"
               style={{ background: arc.color }}
             />
-            <span className="max-w-[4.75rem] truncate text-[11px] leading-none text-foreground">
+            <span className="max-w-[6rem] truncate text-xs leading-none text-foreground">
               {arc.label}
             </span>
-            <span className="shrink-0 text-[11px] leading-none tabular-nums text-muted">
+            <span className="shrink-0 text-xs leading-none tabular-nums text-muted">
               {arc.pct.toFixed(1)}%
             </span>
           </li>
@@ -1355,11 +1361,17 @@ export default function DashboardView() {
             action={
               <div className="flex items-center gap-3 text-[11px] text-muted">
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-sm bg-brand" />
+                  <span
+                    className="h-2 w-2 rounded-sm"
+                    style={{ backgroundColor: DIRECTION_SALE_COLOR }}
+                  />
                   {t("common.sale")}
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <span className="h-2 w-2 rounded-sm bg-accent-hot" />
+                  <span
+                    className="h-2 w-2 rounded-sm"
+                    style={{ backgroundColor: DIRECTION_PURCHASE_COLOR }}
+                  />
                   {t("common.purchase")}
                 </span>
               </div>

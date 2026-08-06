@@ -12,6 +12,11 @@ import {
 import { Select } from "@/components/ui/CrudUi";
 import { SegmentedControl } from "@/components/ui/forms/SegmentedControl";
 import { StatusBadge } from "@/components/ui/StatusBadge";
+import { contractStatusTone } from "@/lib/contract-status";
+import {
+  DIRECTION_PURCHASE_COLOR,
+  DIRECTION_SALE_COLOR,
+} from "@/lib/direction-colors";
 import { formatMoney } from "@/lib/format";
 import { useI18n } from "@/lib/i18n";
 import { contractStatusLabel } from "@/lib/i18n/labels";
@@ -50,7 +55,9 @@ function ProjectCard({
             </h3>
             <p className="mt-1 truncate text-sm text-muted">{contract.customerName}</p>
           </div>
-          <StatusBadge>{contractStatusLabel[contract.status]}</StatusBadge>
+          <StatusBadge tone={contractStatusTone(contract.status)}>
+            {contractStatusLabel[contract.status]}
+          </StatusBadge>
         </div>
 
         <div className="mt-5 flex items-end justify-between gap-4 border-t border-border/60 pt-4">
@@ -70,10 +77,13 @@ function ProjectCard({
 
         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-chip">
           <div
-            className={`h-full rounded-full transition-[width] duration-300 ${
-              isPurchase ? "bg-info" : "bg-accent-hot"
-            }`}
-            style={{ width: `${fulfillment}%` }}
+            className="h-full rounded-full transition-[width] duration-300"
+            style={{
+              width: `${fulfillment}%`,
+              backgroundColor: isPurchase
+                ? DIRECTION_PURCHASE_COLOR
+                : DIRECTION_SALE_COLOR,
+            }}
           />
         </div>
       </div>
@@ -145,8 +155,8 @@ export default function TransactionsPage() {
 
   if (selectedId) {
     return (
-      <div>
-        <div className="mb-4">
+      <div className="ui-page-scroll">
+        <div className="mb-3">
           <button
             type="button"
             className="ui-btn-secondary inline-flex h-9 items-center gap-1.5 px-3 text-sm"

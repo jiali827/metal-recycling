@@ -28,14 +28,12 @@ export function RoleCreateModal({
   const { addRole } = useMockStore();
   const confirm = useConfirm();
   const [name, setName] = useState("");
-  const [code, setCode] = useState("");
   const [access, setAccess] = useState<RoleAccessMap>(() => createDefaultAccess());
   const [enabled, setEnabled] = useState(true);
 
   useEffect(() => {
     if (!open) return;
     setName("");
-    setCode("");
     setAccess(createDefaultAccess());
     setEnabled(true);
   }, [open]);
@@ -51,7 +49,6 @@ export function RoleCreateModal({
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const row = addRole({
-      id: code.trim() || undefined,
       name,
       access,
       permissions: accessToPermissionSummary(access),
@@ -79,24 +76,14 @@ export function RoleCreateModal({
       }
     >
       <form id="role-create-form" className="space-y-5" onSubmit={handleSubmit}>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <FormField label={t("form.roleName")} required>
-            <input
-              className={inputClass}
-              required
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </FormField>
-          <FormField label={t("form.roleCodeOptional")}>
-            <input
-              className={inputClass}
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder={t("form.roleCodePlaceholder")}
-            />
-          </FormField>
-        </div>
+        <FormField label={t("form.roleName")} required>
+          <input
+            className={inputClass}
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </FormField>
         <FormField label={t("permissions.title")}>
           <RolePermissionEditor value={access} onChange={setAccess} />
         </FormField>
@@ -191,19 +178,14 @@ export function RoleDetailModal({
         <p className="text-sm text-muted">{t("common.notFoundHint")}</p>
       ) : (
         <form id="role-edit-form" className="space-y-5" onSubmit={handleSubmit}>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label={t("form.roleName")} required>
-              <input
-                className={inputClass}
-                required
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </FormField>
-            <FormField label={t("form.roleCode")}>
-              <input className={inputClass} value={row.id} disabled />
-            </FormField>
-          </div>
+          <FormField label={t("form.roleName")} required>
+            <input
+              className={inputClass}
+              required
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </FormField>
           <FormField label={t("permissions.title")}>
             <RolePermissionEditor value={access} onChange={setAccess} />
           </FormField>

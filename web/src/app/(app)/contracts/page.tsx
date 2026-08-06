@@ -17,23 +17,13 @@ import {
   ContractDetailModal,
 } from "@/components/entity/lazy-modals";
 import { deleteConfirmMessage } from "@/lib/confirm-delete";
+import { contractStatusTone } from "@/lib/contract-status";
 import { formatKg } from "@/lib/format";
 import { auditColumns, sortByCreatedAtDesc } from "@/lib/list-columns";
 import { useI18n } from "@/lib/i18n";
 import { contractStatusLabel } from "@/lib/i18n/labels";
 import { useMockStore } from "@/lib/mock-store";
 import type { Contract } from "@/lib/types";
-
-const statusTone: Record<
-  string,
-  "muted" | "info" | "warning" | "success" | "default"
-> = {
-  draft: "muted",
-  active: "info",
-  fulfilling: "warning",
-  completed: "success",
-  closed: "default",
-};
 
 export default function ContractsPage() {
   const { t } = useI18n();
@@ -90,7 +80,7 @@ export default function ContractsPage() {
       key: "status",
       header: t("contracts.colStatus"),
       render: (r) => (
-        <StatusBadge tone={statusTone[r.status]}>
+        <StatusBadge tone={contractStatusTone(r.status)}>
           {contractStatusLabel[r.status]}
         </StatusBadge>
       ),
