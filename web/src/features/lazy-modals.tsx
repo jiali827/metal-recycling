@@ -32,6 +32,22 @@ export const MaterialTypeDetailModal = dynamic(
   { ssr: false },
 );
 
+export const ProjectTypeCreateModal = dynamic(
+  () =>
+    import("@/features/project-types/components/ProjectTypeModals").then((m) => ({
+      default: m.ProjectTypeCreateModal,
+    })),
+  { ssr: false },
+);
+
+export const ProjectTypeDetailModal = dynamic(
+  () =>
+    import("@/features/project-types/components/ProjectTypeModals").then((m) => ({
+      default: m.ProjectTypeDetailModal,
+    })),
+  { ssr: false },
+);
+
 export const RoleCreateModal = dynamic(
   () =>
     import("@/features/roles/components/RoleModals").then((m) => ({
@@ -65,7 +81,35 @@ export const EmployeeDetailModal = dynamic(
 export const ContractCreateModal = dynamic(
   () =>
     import("@/features/contracts/components/ContractModals").then((m) => ({
-      default: m.ContractCreateModal,
+      default: m.PurchaseContractCreateModal,
+    })),
+  { ssr: false },
+);
+export const PurchaseContractCreateModal = dynamic(
+  () =>
+    import("@/features/contracts/components/ContractModals").then((m) => ({
+      default: m.PurchaseContractCreateModal,
+    })),
+  { ssr: false },
+);
+export const PurchaseContractDetailModal = dynamic(
+  () =>
+    import("@/features/contracts/components/ContractModals").then((m) => ({
+      default: m.PurchaseContractDetailModal,
+    })),
+  { ssr: false },
+);
+export const SaleContractCreateModal = dynamic(
+  () =>
+    import("@/features/contracts/components/ContractModals").then((m) => ({
+      default: m.SaleContractCreateModal,
+    })),
+  { ssr: false },
+);
+export const SaleContractDetailModal = dynamic(
+  () =>
+    import("@/features/contracts/components/ContractModals").then((m) => ({
+      default: m.SaleContractDetailModal,
     })),
   { ssr: false },
 );
