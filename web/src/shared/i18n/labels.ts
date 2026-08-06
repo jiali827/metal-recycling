@@ -132,6 +132,7 @@ export function getContractStatusLabel(
     fulfilling: s.fulfilling,
     completed: s.completed,
     closed: s.closed,
+    expired: s.expired,
   };
 }
 

@@ -8,6 +8,7 @@ import {
   CaretUpDown,
   Check,
   FileText,
+  Folders,
   GearSix,
   Globe,
   House,
@@ -32,6 +33,7 @@ import { getMenuPermissionLevel, isMenuPermissionFilterEnabled } from "@/shared/
 import { menuGroups, menuItems, type MenuIconKey } from "@/shared/config/menu";
 import { ProfileEditModal, PasswordChangeModal } from "@/features/settings/components/AccountModals";
 import { UserAvatar } from "@/shared/ui/AvatarUploadField";
+import { CompanyLogoMark } from "@/shared/ui/CompanyLogo";
 import { ThemeColorPicker } from "./ThemeColorPicker";
 
 const iconMap: Record<MenuIconKey, Icon> = {
@@ -43,6 +45,7 @@ const iconMap: Record<MenuIconKey, Icon> = {
   money: CurrencyCircleDollar,
   users: Users,
   package: Package,
+  folders: Folders,
   idCard: IdentificationCard,
   shield: ShieldCheck,
   gear: GearSix,
@@ -91,9 +94,7 @@ export function Sidebar() {
     <aside className="flex h-full w-60 shrink-0 flex-col border-r border-border bg-sidebar">
       <div className="shrink-0 px-5 py-5">
         <div className="flex items-center gap-2.5">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] bg-brand text-sm font-bold text-white">
-            BX
-          </div>
+          <CompanyLogoMark framed logoUrl={tenant.logoUrl} />
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-semibold text-foreground">
               {t("app.name")}

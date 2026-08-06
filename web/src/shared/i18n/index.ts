@@ -5,10 +5,10 @@ export {
   LOCALE_STORAGE_KEY,
 } from "./types";
 export { catalogs } from "./messages";
+export { translate } from "./translate";
 export {
   I18nProvider,
   useI18n,
-  translate,
   getActiveLocale,
   getActiveMessages,
 } from "./provider";

@@ -11,6 +11,7 @@ export type ModuleId =
   | "payments"
   | "customers"
   | "materialTypes"
+  | "projectTypes"
   | "employees"
   | "roles"
   | "settings";
@@ -37,6 +38,7 @@ export interface PermissionModuleDef {
     | "menu.payments"
     | "menu.customers"
     | "menu.materialTypes"
+    | "menu.projectTypes"
     | "menu.employees"
     | "menu.roles"
     | "menu.settings";
@@ -91,6 +93,13 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
     group: "master",
     menuHref: "/material-types",
     menuLabelKey: "menu.materialTypes",
+    actions: ["view", "create", "edit", "delete"],
+  },
+  {
+    id: "projectTypes",
+    group: "master",
+    menuHref: "/project-types",
+    menuLabelKey: "menu.projectTypes",
     actions: ["view", "create", "edit", "delete"],
   },
   {
@@ -189,6 +198,7 @@ export const BUILTIN_ROLE_ACCESS: Record<RoleId, RoleAccessMap> = {
     payments: { menu: "read", buttons: ["view"] },
     customers: { menu: "write", buttons: ["view", "create", "edit", "delete"] },
     materialTypes: { menu: "write", buttons: ["view", "create", "edit", "delete"] },
+    projectTypes: { menu: "write", buttons: ["view", "create", "edit", "delete"] },
     employees: { menu: "write", buttons: ["view", "create", "edit", "delete"] },
     roles: { menu: "write", buttons: ["view", "create", "edit", "delete"] },
     settings: { menu: "write", buttons: ["view", "edit"] },
@@ -200,6 +210,7 @@ export const BUILTIN_ROLE_ACCESS: Record<RoleId, RoleAccessMap> = {
     },
     customers: { menu: "read", buttons: ["view"] },
     materialTypes: { menu: "read", buttons: ["view"] },
+    projectTypes: { menu: "read", buttons: ["view"] },
   }),
   weigh: defineAccess({
     weighTickets: {
@@ -208,6 +219,7 @@ export const BUILTIN_ROLE_ACCESS: Record<RoleId, RoleAccessMap> = {
     },
     customers: { menu: "read", buttons: ["view"] },
     materialTypes: { menu: "read", buttons: ["view"] },
+    projectTypes: { menu: "read", buttons: ["view"] },
   }),
   finance: defineAccess({
     dashboard: { menu: "read", buttons: ["view"] },
@@ -226,6 +238,7 @@ export const BUILTIN_ROLE_ACCESS: Record<RoleId, RoleAccessMap> = {
     payments: { menu: "read", buttons: ["view"] },
     customers: { menu: "read", buttons: ["view"] },
     materialTypes: { menu: "read", buttons: ["view"] },
+    projectTypes: { menu: "read", buttons: ["view"] },
     employees: { menu: "read", buttons: ["view"] },
     roles: { menu: "read", buttons: ["view"] },
     settings: { menu: "read", buttons: ["view"] },

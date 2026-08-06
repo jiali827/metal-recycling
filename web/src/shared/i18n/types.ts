@@ -95,6 +95,7 @@ export type MessageDict = {
     payments: string;
     customers: string;
     materialTypes: string;
+    projectTypes: string;
     employees: string;
     roles: string;
     settings: string;
@@ -104,13 +105,16 @@ export type MessageDict = {
     title: string;
     subtitle: string;
     email: string;
+    emailPlaceholder: string;
     password: string;
+    passwordPlaceholder: string;
     submit: string;
     failed: string;
-    demoHint: string;
-    noAccount: string;
-    registerLink: string;
-    tenantLabel: string;
+    brandKicker: string;
+    layoutOverlay: string;
+    layoutSplit: string;
+    showPassword: string;
+    hidePassword: string;
     emailRequired: string;
     passwordRequired: string;
     passwordIncorrect: string;
@@ -172,6 +176,10 @@ export type MessageDict = {
     title: string;
     description: string;
     new: string;
+    newPurchase: string;
+    newSale: string;
+    purchaseTab: string;
+    saleTab: string;
     keywordPlaceholder: string;
     colNo: string;
     colType: string;
@@ -182,6 +190,42 @@ export type MessageDict = {
     colPrice: string;
     colDate: string;
     colSignedDate: string;
+    colMaterial: string;
+    colProgress: string;
+    colAttachment: string;
+    quotedOn: string;
+    validUntil: string;
+    contactName: string;
+    project: string;
+    lines: string;
+    materialName: string;
+    priceMode: string;
+    priceModeExYard: string;
+    priceModeCollect: string;
+    priceModeOther: string;
+    unitPrice: string;
+    unitPricePerTon: string;
+    plannedTons: string;
+    fulfilledTons: string;
+    unitTon: string;
+    addLine: string;
+    removeLine: string;
+    remarks: string;
+    paymentTerms: string;
+    fulfillBy: string;
+    tolerancePercent: string;
+    totalAmount: string;
+    priceTerms: string;
+    origin: string;
+    destination: string;
+    packingSummary: string;
+    bankAccountSummary: string;
+    statusValid: string;
+    cannotDeleteLinked: string;
+    overToleranceHint: string;
+    readyToCompleteHint: string;
+    relatedSaleContract: string;
+    relatedSaleLine: string;
     uploadTitle: string;
     uploadHint: string;
     uploadDrop: string;
@@ -191,6 +235,11 @@ export type MessageDict = {
     uploadUnsupported: string;
     uploadClear: string;
     viewAttachment: string;
+    zoomIn: string;
+    zoomOut: string;
+    downloadAttachment: string;
+    previewLoading: string;
+    previewFailed: string;
   };
   weighTickets: {
     title: string;
@@ -305,10 +354,20 @@ export type MessageDict = {
     description: string;
     new: string;
   };
+  projectTypes: {
+    title: string;
+    description: string;
+    new: string;
+  };
   employees: {
     title: string;
     description: string;
     new: string;
+    resetPassword: string;
+    resetPasswordConfirmTitle: string;
+    resetPasswordConfirm: string;
+    resetPasswordSuccess: string;
+    emailDuplicate: string;
   };
   roles: {
     title: string;
@@ -328,8 +387,25 @@ export type MessageDict = {
     cashTitle: string;
     cashDescription: string;
     tenantInfo: string;
+    enterpriseInfo: string;
+    enterpriseInfoHint: string;
+    financeParams: string;
+    companyLogo: string;
+    companyLogoHint: string;
+    logoChange: string;
+    logoRemove: string;
     companyName: string;
     companyNameEn: string;
+    address: string;
+    addressEn: string;
+    addressHint: string;
+    phones: string;
+    phonesHint: string;
+    addPhone: string;
+    removePhone: string;
+    contactPerson: string;
+    companyEmail: string;
+    companyEmailHint: string;
     currency: string;
     openingCash: string;
     currencyHint: string;
@@ -369,6 +445,14 @@ export type MessageDict = {
     passwordLength: string;
     passwordCharset: string;
     passwordTooShort: string;
+    addressTooLong: string;
+    addressEnTooLong: string;
+    phoneTooLong: string;
+    phoneInvalid: string;
+    phoneTooMany: string;
+    contactPersonTooLong: string;
+    companyEmailTooLong: string;
+    companyEmailInvalid: string;
   };
   status: {
     draft: string;
@@ -376,6 +460,7 @@ export type MessageDict = {
     fulfilling: string;
     completed: string;
     closed: string;
+    expired: string;
     normal: string;
     void: string;
     open: string;
@@ -413,7 +498,7 @@ export type MessageDict = {
     actionDelete: string;
   };
   auth: {
-    demoUser: string;
+    defaultUserName: string;
     guestRole: string;
   };
   fields: {
@@ -451,6 +536,7 @@ export type MessageDict = {
     selectTicketFirst: string;
     ticketSummary: string;
     arApAutoHint: string;
+    bxNoAutoHint: string;
     paymentSettlementHint: string;
     settleReceivable: string;
     settlePayable: string;
@@ -532,6 +618,7 @@ export type MessageDict = {
     enabled: string;
     disabled: string;
     materialDetail: string;
+    projectDetail: string;
     materialName: string;
     displayName: string;
     email: string;
@@ -555,6 +642,7 @@ export type MessageDict = {
     keywordPayable: string;
     keywordEmployee: string;
     keywordMaterial: string;
+    keywordProject: string;
     colRole: string;
     colRoleCode: string;
     colPermissions: string;

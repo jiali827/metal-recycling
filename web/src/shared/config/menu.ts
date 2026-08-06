@@ -10,6 +10,7 @@ export type MenuIconKey =
   | "money"
   | "users"
   | "package"
+  | "folders"
   | "idCard"
   | "shield"
   | "gear"
@@ -37,6 +38,7 @@ export const menuItems: MenuItem[] = [
   { href: "/payments", labelKey: "menu.payments", icon: "money", group: "main", moduleId: "payments" },
   { href: "/customers", labelKey: "menu.customers", icon: "users", group: "master", moduleId: "customers" },
   { href: "/material-types", labelKey: "menu.materialTypes", icon: "package", group: "master", moduleId: "materialTypes" },
+  { href: "/project-types", labelKey: "menu.projectTypes", icon: "folders", group: "master", moduleId: "projectTypes" },
   { href: "/employees", labelKey: "menu.employees", icon: "idCard", group: "system", moduleId: "employees" },
   { href: "/roles", labelKey: "menu.roles", icon: "shield", group: "system", moduleId: "roles" },
   { href: "/settings/cash", labelKey: "menu.settings", icon: "gear", group: "system", moduleId: "settings" },

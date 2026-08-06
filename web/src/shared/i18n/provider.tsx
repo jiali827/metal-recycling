@@ -18,8 +18,7 @@ import {
   type MessageDict,
   type MessageKey,
 } from "./types";
-
-type Vars = Record<string, string | number>;
+import { translate } from "./translate";
 
 type I18nContextValue = {
   locale: Locale;
@@ -41,21 +40,7 @@ export function getActiveMessages(): MessageDict {
   return catalogs[activeLocale];
 }
 
-export function translate(
-  locale: Locale,
-  key: MessageKey,
-  vars?: Vars,
-): string {
-  const [ns, field] = key.split(".") as [keyof MessageDict, string];
-  const section = catalogs[locale][ns] as Record<string, string>;
-  let text = section?.[field] ?? key;
-  if (vars) {
-    for (const [k, v] of Object.entries(vars)) {
-      text = text.replaceAll(`{${k}}`, String(v));
-    }
-  }
-  return text;
-}
+type Vars = Record<string, string | number>;
 
 function isLocale(value: string | null): value is Locale {
   return !!value && (LOCALES as string[]).includes(value);
