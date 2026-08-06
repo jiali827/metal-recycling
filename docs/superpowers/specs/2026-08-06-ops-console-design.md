@@ -147,12 +147,12 @@
 - 创建企业侧主管理员账号（租户内「系统管理员」）  
 - 写审计 `tenant.create`  
 
-**邮箱约束：** 企业用户邮箱建议**全局唯一**，避免一人跨租户身份混乱；重复则拒绝创建。
+**邮箱约束：** 企业用户邮箱**必须全局唯一**；重复则拒绝创建，避免一人跨租户身份混乱。
 
 ### 5.2 停用（仅超管）
 
 1. 二次确认  
-2. 状态 → `suspended`，记录 `suspendedAt`  
+2. 状态 → `suspended`，记录 `suspendedAt`，更新 `statusChangedAt`  
 3. 吊销该 `tenant_id` 下全部企业会话 / 刷新令牌  
 4. 写审计 `tenant.suspend`  
 
@@ -160,7 +160,7 @@
 
 ### 5.3 启用（仅超管）
 
-1. 状态 → `active`  
+1. 状态 → `active`，清空 `suspendedAt`，更新 `statusChangedAt`  
 2. 写审计 `tenant.resume`  
 3. 企业账号可再次登录（密码未改则仍用原密码）  
 
@@ -196,7 +196,7 @@ V1 不引入 `pending` / `deleted`。不做硬删除。
 ### 6.2 列表 / 详情可见字段（元数据 only）
 
 - 租户 ID、公司中/英文名、状态（`active` / `suspended`）  
-- 创建时间、最近启停时间  
+- 创建时间、状态最近变更时间（`statusChangedAt`：每次启停更新；创建时等于 `createdAt`）  
 - 主管理员：姓名、邮箱（无密码）  
 - 运营内部备注（可选）  
 
@@ -216,7 +216,7 @@ V1 不引入 `pending` / `deleted`。不做硬删除。
 |------|------|
 | `PlatformUser` | 运营人员账号（与企业 `Employee` 分表/分域） |
 | `PlatformRole` + 权限绑定 | 超管 / 普通运营 |
-| `Tenant` | `id`, `name`, `nameEn`, `status`, `createdAt`, `suspendedAt?`, `opsNote?` |
+| `Tenant` | `id`, `name`, `nameEn`, `status`, `createdAt`, `statusChangedAt`, `suspendedAt?`（停用时有值，启用时清空）, `opsNote?` |
 | `TenantPrimaryAdmin` | 指向该租户主管理员（企业用户）；重置密码只针对此人 |
 | `AuditLog` | `actorId`, `action`, `tenantId?`, `metadata`(脱敏), `result`, `createdAt` |
 
