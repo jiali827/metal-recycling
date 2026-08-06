@@ -8,8 +8,18 @@ export type RoleId =
   | "finance"
   | "boss";
 
+/** @deprecated 合同已拆为采购/销售两套实体；仅作方向/追溯视图兼容 */
 export type ContractType = "purchase" | "sale";
-export type ContractStatus = "draft" | "active" | "fulfilling" | "completed" | "closed";
+export type PurchaseContractStatus = "draft" | "active" | "expired" | "closed";
+export type SaleContractStatus =
+  | "draft"
+  | "active"
+  | "fulfilling"
+  | "completed"
+  | "closed";
+/** @deprecated 使用 PurchaseContractStatus / SaleContractStatus */
+export type ContractStatus = SaleContractStatus | PurchaseContractStatus;
+export type PurchasePriceMode = "ex_yard" | "collect" | "other";
 export type TicketDirection = "purchase" | "sale";
 export type TicketStatus = "normal" | "void";
 export type SettlementStatus = "open" | "partial" | "settled" | "void";
@@ -31,6 +41,18 @@ export interface Tenant {
   nameEn: string;
   currency: string;
   openingCash: number;
+  /** 公司 Logo（正方形 JPEG Data URL，演示环境本地存储） */
+  logoUrl?: string;
+  /** 中文地址（打印单据等） */
+  address: string;
+  /** 英文地址（打印单据等） */
+  addressEn: string;
+  /** 联系电话，可多条 */
+  phones: string[];
+  /** 联系人 */
+  contactPerson: string;
+  /** 公司对外邮箱 */
+  email: string;
 }
 
 export interface User extends RecordTimestamps {
@@ -64,23 +86,97 @@ export interface MaterialType extends RecordTimestamps {
   enabled: boolean;
 }
 
-export interface Contract extends RecordTimestamps {
+export interface ProjectType extends RecordTimestamps {
+  id: string;
+  name: string;
+  enabled: boolean;
+}
+
+export interface PurchaseContractLine {
+  id: string;
+  materialTypeId?: string;
+  materialName: string;
+  priceMode: PurchasePriceMode;
+  unitPrice: number;
+  lineRemark?: string;
+}
+
+export interface PurchaseContract extends RecordTimestamps {
+  id: string;
+  no: string;
+  customerId: string;
+  customerName: string;
+  contactName?: string;
+  project?: string;
+  status: PurchaseContractStatus;
+  /** 报价/签订日期 */
+  quotedOn: string;
+  validUntil?: string;
+  currency: string;
+  lines: PurchaseContractLine[];
+  remarks?: string;
+  attachmentName?: string;
+  attachmentDataUrl?: string;
+}
+
+export interface SaleContractLine {
+  id: string;
+  materialTypeId?: string;
+  materialName: string;
+  /** 约量，内部存 KG */
+  plannedQty: number;
+  qtyUnit: "kg";
+  /** 单价：每吨 */
+  unitPrice: number;
+  lineAmount?: number;
+  /** 已履约 KG，由关联磅单累计 */
+  fulfilledQty: number;
+  lineRemark?: string;
+}
+
+export interface SaleContract extends RecordTimestamps {
+  id: string;
+  no: string;
+  customerId: string;
+  customerName: string;
+  status: SaleContractStatus;
+  signedOn: string;
+  paymentTerms?: string;
+  fulfillBy?: string;
+  /** 容差 %；空=不按容差提示 */
+  tolerancePercent?: number;
+  currency: string;
+  totalAmount?: number;
+  priceTerms?: string;
+  origin?: string;
+  destination?: string;
+  packingSummary?: string;
+  bankAccountSummary?: string;
+  lines: SaleContractLine[];
+  remarks?: string;
+  attachmentName?: string;
+  attachmentDataUrl?: string;
+}
+
+/**
+ * 项目全景等追溯视图用的统一合同投影（非持久化模型）。
+ */
+export interface ContractTraceItem extends RecordTimestamps {
   id: string;
   no: string;
   type: ContractType;
   customerId: string;
   customerName: string;
-  status: ContractStatus;
+  status: string;
   plannedKg: number;
   fulfilledKg: number;
   unitPriceSummary: string;
-  /** 合同簽訂日期（業務日期，非系統創建時間） */
   date: string;
-  /** 雙方簽字蓋章合同掃描件文件名 */
   attachmentName?: string;
-  /** 掃描件預覽（演示用，僅本地會話） */
-  attachmentDataUrl?: string;
 }
+
+/** @deprecated 使用 PurchaseContract / SaleContract */
+export type Contract = ContractTraceItem;
 
 export interface WeighTicket extends RecordTimestamps {
   id: string;
@@ -96,7 +192,11 @@ export interface WeighTicket extends RecordTimestamps {
   deductionKg: number;
   netKg: number;
   amount: number;
+  /** 弱关联：合同编号文本（采购常用；销售也可冗余） */
   contractNo: string;
+  /** 销售合同结构化关联（可选） */
+  saleContractId?: string;
+  saleContractLineId?: string;
   status: TicketStatus;
   /** 備註：貨櫃號、付款狀態、其他說明等 */
   remarks?: string;

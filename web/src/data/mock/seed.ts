@@ -1,18 +1,25 @@
 import type {
   ArApItem,
-  Contract,
   Customer,
   CustomerCategory,
   DashboardStats,
   MaterialType,
   PaymentRecord,
+  ProjectType,
+  PurchaseContract,
   RoleDef,
   RoleId,
+  SaleContract,
   Tenant,
   User,
   WeighTicket,
 } from "@/entities/types";
+import { saleLineAmount } from "@/entities/contract/summaries";
 import { BUILTIN_ROLE_ACCESS, accessToPermissionSummary } from "@/shared/config/permissions";
+import {
+  COMPANY_NAME_EN,
+  COMPANY_NAME_ZH_HANT,
+} from "@/shared/config/company";
 import { seedTimestamps, type RecordTimestamps } from "@/shared/lib/timestamps";
 
 function withSeed<T>(rows: T[], day: string): (T & RecordTimestamps)[] {
@@ -26,12 +33,35 @@ function withSeedBizDate<T extends { date: string }>(rows: T[]): (T & RecordTime
   }));
 }
 
+function withSeedQuotedOn<T extends { quotedOn: string }>(
+  rows: T[],
+): (T & RecordTimestamps)[] {
+  return rows.map((row, index) => ({
+    ...row,
+    ...seedTimestamps(row.quotedOn.slice(0, 10), index + 1),
+  }));
+}
+
+function withSeedSignedOn<T extends { signedOn: string }>(
+  rows: T[],
+): (T & RecordTimestamps)[] {
+  return rows.map((row, index) => ({
+    ...row,
+    ...seedTimestamps(row.signedOn.slice(0, 10), index + 1),
+  }));
+}
+
 export const tenant: Tenant = {
   id: "t-baoxin",
-  name: "寶新金屬回收有限公司",
-  nameEn: "BAO XIN METAL RECYCLE LIMITED",
+  name: COMPANY_NAME_ZH_HANT,
+  nameEn: COMPANY_NAME_EN,
   currency: "HKD",
   openingCash: 100000,
+  address: "香港特別行政區葵青區青衣路53-67號",
+  addressEn: "53-67 Tsing Yi Road Kwai Tsing District, Hong Kong.",
+  phones: ["2331 2018", "6585 3230"],
+  contactPerson: "Sam",
+  email: "yuenkairecycle@gmail.com",
 };
 
 function seedRole(id: RoleId, name: string): Omit<RoleDef, keyof RecordTimestamps> {
@@ -136,82 +166,232 @@ const seedMaterialTypes: Omit<MaterialType, keyof RecordTimestamps>[] = [
 
 export const materialTypes: MaterialType[] = withSeed(seedMaterialTypes, "2026-06-25");
 
-const seedContracts: Omit<Contract, keyof RecordTimestamps>[] = [
+const seedProjectTypes: Omit<ProjectType, keyof RecordTimestamps>[] = [
+  { id: "pt1", name: "廢料回收", enabled: true },
+];
+
+export const projectTypes: ProjectType[] = withSeed(seedProjectTypes, "2026-06-25");
+
+const seedPurchaseContracts: Omit<PurchaseContract, keyof RecordTimestamps>[] = [
   {
-    id: "ct1",
-    no: "PO-2026-0720",
-    type: "purchase",
+    id: "pc1",
+    no: "Q-YK-2026-008",
     customerId: "c1",
     customerName: "中國土木-洪水橋",
-    status: "fulfilling",
-    plannedKg: 80000,
-    fulfilledKg: 66050,
-    unitPriceSummary: "工字 $2.45",
-    date: "2026-07-20",
+    contactName: "",
+    project: "廢料回收",
+    status: "active",
+    quotedOn: "2026-05-13",
+    validUntil: "2026-06-12",
+    currency: "HKD",
+    lines: [
+      {
+        id: "pcl1",
+        materialTypeId: "m6",
+        materialName: "工字",
+        priceMode: "ex_yard",
+        unitPrice: 2450,
+        lineRemark: "預計130噸，地盤會切割",
+      },
+    ],
+    remarks: "客戶需提供人手於現場協助及指揮",
+    attachmentName: "Q-YK-2026-008中國土木.pdf",
+    attachmentDataUrl: "/mock-contracts/purchase/Q-YK-2026-008.pdf",
   },
   {
-    id: "ct2",
-    no: "SO-2026-0718",
-    type: "sale",
-    customerId: "c2",
-    customerName: "乾亨泰有限公司",
-    status: "fulfilling",
-    plannedKg: 300000,
-    fulfilledKg: 218050,
-    unitPriceSummary: "PNS $2.68",
-    date: "2026-07-18",
-  },
-  {
-    id: "ct3",
-    no: "PO-2026-0722",
-    type: "purchase",
+    id: "pc2",
+    no: "Q-YK-2026-002",
     customerId: "c3",
     customerName: "金門-三跑",
+    project: "廢料回收",
     status: "active",
-    plannedKg: 50000,
-    fulfilledKg: 17600,
-    unitPriceSummary: "AA $2.30 / AA+A $2.20",
-    date: "2026-07-22",
+    quotedOn: "2026-01-07",
+    currency: "HKD",
+    lines: [
+      {
+        id: "pcl2",
+        materialTypeId: "m6",
+        materialName: "工字",
+        priceMode: "ex_yard",
+        unitPrice: 2050,
+      },
+    ],
+    attachmentName: "Q-YK-2026-002-華強.pdf",
+    attachmentDataUrl: "/mock-contracts/purchase/Q-YK-2026-002.pdf",
   },
   {
-    id: "ct4",
-    no: "PO-2026-0721",
-    type: "purchase",
+    id: "pc3",
+    no: "Q-YK-2026-009",
     customerId: "c4",
     customerName: "元大(中環3A)",
-    status: "fulfilling",
-    plannedKg: 150000,
-    fulfilledKg: 109660,
-    unitPriceSummary: "圓通 $1.80",
-    date: "2026-07-21",
+    contactName: "Mr Sean Wong",
+    project: "廢料回收",
+    status: "active",
+    quotedOn: "2026-06-06",
+    validUntil: "2026-07-05",
+    currency: "HKD",
+    lines: [
+      {
+        id: "pcl3",
+        materialTypeId: "m6",
+        materialName: "工字",
+        priceMode: "collect",
+        unitPrice: 2300,
+        lineRemark: "不包在地盤上料",
+      },
+    ],
+    attachmentName: "Q-YK-2026-009仲德建築.pdf",
+    attachmentDataUrl: "/mock-contracts/purchase/Q-YK-2026-009.pdf",
   },
   {
-    id: "ct5",
-    no: "SO-2026-0723",
-    type: "sale",
-    customerId: "c5",
-    customerName: "浩昌五金回收有限公司",
-    status: "completed",
-    plannedKg: 3380,
-    fulfilledKg: 3380,
-    unitPriceSummary: "角梯 $19.8 / 往銻 $12.8",
-    date: "2026-07-23",
-  },
-  {
-    id: "ct6",
+    id: "pc4",
     no: "PO-2026-0715",
-    type: "purchase",
     customerId: "c7",
     customerName: "雄輝",
     status: "draft",
-    plannedKg: 20000,
-    fulfilledKg: 0,
-    unitPriceSummary: "A $2.25",
-    date: "2026-07-15",
+    quotedOn: "2026-07-15",
+    currency: "HKD",
+    lines: [
+      {
+        id: "pcl4",
+        materialTypeId: "m2",
+        materialName: "A",
+        priceMode: "other",
+        unitPrice: 2250,
+      },
+    ],
   },
 ];
 
-export const contracts: Contract[] = withSeedBizDate(seedContracts);
+const seedSaleContracts: Omit<SaleContract, keyof RecordTimestamps>[] = [
+  {
+    id: "sc1",
+    no: "NDP26-YK006",
+    customerId: "c2",
+    customerName: "乾亨泰有限公司",
+    status: "fulfilling",
+    signedOn: "2026-05-28",
+    paymentTerms: "T/T before the loading",
+    fulfillBy: "2026-07-31",
+    tolerancePercent: 10,
+    currency: "HKD",
+    totalAmount: 1350000,
+    priceTerms: "Ex Yard (Including loading cost)",
+    origin: "Hong Kong",
+    destination: "Indonesia",
+    packingSummary: "Bulk packed in 12' x 20' containers",
+    bankAccountSummary: "Standard Chartered Bank 407-0-094844-9",
+    lines: [
+      {
+        id: "scl1",
+        materialTypeId: "m5",
+        materialName: "PNS",
+        plannedQty: 500000,
+        qtyUnit: "kg",
+        unitPrice: 2700,
+        lineAmount: saleLineAmount(500000, 2700),
+        fulfilledQty: 55730,
+      },
+    ],
+    attachmentName: "20260528-NEXUS DAWN PACIFIC-NDP26-YK006.pdf",
+    attachmentDataUrl: "/mock-contracts/sale/NDP26-YK006.pdf",
+  },
+  {
+    id: "sc2",
+    no: "POBX/2026004",
+    customerId: "c5",
+    customerName: "浩昌五金回收有限公司",
+    status: "fulfilling",
+    signedOn: "2026-06-08",
+    paymentTerms: "出貨前全數支付",
+    fulfillBy: "2026-06-30",
+    tolerancePercent: 10,
+    currency: "HKD",
+    totalAmount: 1310000,
+    origin: "香港",
+    packingSummary: "20呎標準貨櫃，每櫃約26噸",
+    lines: [
+      {
+        id: "scl2",
+        materialTypeId: "m5",
+        materialName: "PNS",
+        plannedQty: 500000,
+        qtyUnit: "kg",
+        unitPrice: 2620,
+        lineAmount: saleLineAmount(500000, 2620),
+        fulfilledQty: 3380,
+      },
+    ],
+    attachmentName: "20260608-騰駿合同-POBX2026004.pdf",
+    attachmentDataUrl: "/mock-contracts/sale/POBX2026004.pdf",
+  },
+  {
+    id: "sc3",
+    no: "SS260801P",
+    customerId: "c6",
+    customerName: "晉星國際有限公司",
+    status: "active",
+    signedOn: "2026-08-03",
+    paymentTerms: "首期預付款50%，尾款按實裝數量結算",
+    fulfillBy: "2026-09-30",
+    tolerancePercent: 10,
+    currency: "HKD",
+    totalAmount: 6125000,
+    priceTerms: "含倉至船裝貨",
+    origin: "香港",
+    packingSummary: "散貨裝船",
+    bankAccountSummary: "南洋商業銀行 043-488-70000-6671",
+    lines: [
+      {
+        id: "scl3",
+        materialTypeId: "m5",
+        materialName: "PNS",
+        plannedQty: 2500000,
+        qtyUnit: "kg",
+        unitPrice: 2450,
+        lineAmount: saleLineAmount(2500000, 2450),
+        fulfilledQty: 0,
+      },
+    ],
+    remarks: "成型廢鐵 PNS（不能含鋼筋）；規格與雜質罰則見合同掃描件",
+    attachmentName: "20260803-晉星廢鋼採購合同-SS260801P.pdf",
+    attachmentDataUrl: "/mock-contracts/sale/SS260801P.pdf",
+  },
+  {
+    id: "sc4",
+    no: "YKC-20260601",
+    customerId: "c2",
+    customerName: "乾亨泰有限公司",
+    status: "active",
+    signedOn: "2026-06-10",
+    paymentTerms: "T/T Before the loading",
+    fulfillBy: "2026-06-30",
+    tolerancePercent: 10,
+    currency: "HKD",
+    totalAmount: 530000,
+    origin: "Hong Kong",
+    destination: "India",
+    packingSummary: "Pack in about 20 x 20 ft containers",
+    bankAccountSummary: "Standard Chartered Bank 407-0-094844-9",
+    lines: [
+      {
+        id: "scl4",
+        materialTypeId: "m5",
+        materialName: "PNS",
+        plannedQty: 200000,
+        qtyUnit: "kg",
+        unitPrice: 2650,
+        lineAmount: saleLineAmount(200000, 2650),
+        fulfilledQty: 0,
+      },
+    ],
+    attachmentName: "AJ-Sales-Contract-YKC-20260601.pdf",
+    attachmentDataUrl: "/mock-contracts/sale/YKC-20260601.pdf",
+  },
+];
+
+export const purchaseContracts: PurchaseContract[] = withSeedQuotedOn(seedPurchaseContracts);
+export const saleContracts: SaleContract[] = withSeedSignedOn(seedSaleContracts);
 
 const seedWeighTickets: Omit<WeighTicket, keyof RecordTimestamps>[] = [
   {
@@ -227,7 +407,7 @@ const seedWeighTickets: Omit<WeighTicket, keyof RecordTimestamps>[] = [
     deductionKg: 0,
     netKg: 16930,
     amount: 41478.5,
-    contractNo: "PO-2026-0720",
+    contractNo: "Q-YK-2026-008",
     status: "normal",
   },
   {
@@ -243,7 +423,7 @@ const seedWeighTickets: Omit<WeighTicket, keyof RecordTimestamps>[] = [
     deductionKg: 100,
     netKg: 8180,
     amount: 18814,
-    contractNo: "PO-2026-0722",
+    contractNo: "Q-YK-2026-002",
     status: "normal",
     remarks: "已付現金",
   },
@@ -260,7 +440,9 @@ const seedWeighTickets: Omit<WeighTicket, keyof RecordTimestamps>[] = [
     deductionKg: 0,
     netKg: 27760,
     amount: 74396.8,
-    contractNo: "SO-2026-0718",
+    contractNo: "NDP26-YK006",
+    saleContractId: "sc1",
+    saleContractLineId: "scl1",
     status: "normal",
     remarks: "FCIU6185730/M3586207",
   },
@@ -271,13 +453,15 @@ const seedWeighTickets: Omit<WeighTicket, keyof RecordTimestamps>[] = [
     date: "2026-07-21T14:20",
     customerName: "浩昌五金回收有限公司",
     plate: "XU157",
-    materialSummary: "角梯 + 往銻",
+    materialSummary: "PNS",
     grossKg: 21430,
     tareKg: 18050,
     deductionKg: 0,
     netKg: 3380,
-    amount: 66224,
-    contractNo: "SO-2026-0723",
+    amount: 8855.6,
+    contractNo: "POBX/2026004",
+    saleContractId: "sc2",
+    saleContractLineId: "scl2",
     status: "normal",
     remarks: "已收現金",
   },
@@ -294,7 +478,7 @@ const seedWeighTickets: Omit<WeighTicket, keyof RecordTimestamps>[] = [
     deductionKg: 7860,
     netKg: 9020,
     amount: 16236,
-    contractNo: "PO-2026-0721",
+    contractNo: "Q-YK-2026-009",
     status: "normal",
   },
   {
@@ -342,7 +526,9 @@ const seedWeighTickets: Omit<WeighTicket, keyof RecordTimestamps>[] = [
     deductionKg: 0,
     netKg: 27970,
     amount: 74959.6,
-    contractNo: "SO-2026-0718",
+    contractNo: "NDP26-YK006",
+    saleContractId: "sc1",
+    saleContractLineId: "scl1",
     status: "normal",
     remarks: "FBIU0137120",
   },
