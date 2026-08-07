@@ -10,21 +10,24 @@ import {
   FormSection,
   Select,
   inputClass,
-  textareaClass,
+  textareaClass
 } from "@/shared/ui/CrudUi";
 import { CompanyLogoUploadField } from "@/shared/ui/CompanyLogo";
 import { CURRENCY_OPTIONS } from "@/shared/lib/currency";
 import { formatMoney } from "@/shared/lib/format";
 import { useI18n } from "@/shared/i18n";
 import { useMockStore } from "@/data/mock/store";
+import { useModulePermission } from "@/shared/config/menu-permissions";
 import {
   COMPANY_ADDRESS_EN_MAX,
   COMPANY_ADDRESS_MAX,
+  COMPANY_ABBR_MAX,
   COMPANY_CONTACT_PERSON_MAX,
   COMPANY_EMAIL_MAX,
   COMPANY_PHONE_MAX,
   COMPANY_PHONE_MAX_COUNT,
   firstFieldError,
+  normalizeCompanyAbbr,
   normalizeCompanyPhones,
   validateCompanyProfile,
   type CompanyProfileErrorCode,
@@ -37,9 +40,12 @@ function ensurePhoneRows(phones: string[]) {
 
 export default function CashSettingsPage() {
   const { t } = useI18n();
+  const perm = useModulePermission("settings");
   const { tenant, updateTenant } = useMockStore();
+  const canEdit = perm.canEdit;
   const [name, setName] = useState(tenant.name);
   const [nameEn, setNameEn] = useState(tenant.nameEn);
+  const [abbr, setAbbr] = useState(tenant.abbr);
   const [address, setAddress] = useState(tenant.address);
   const [addressEn, setAddressEn] = useState(tenant.addressEn);
   const [phones, setPhones] = useState(() => ensurePhoneRows(tenant.phones));
@@ -55,6 +61,7 @@ export default function CashSettingsPage() {
   useEffect(() => {
     setName(tenant.name);
     setNameEn(tenant.nameEn);
+    setAbbr(tenant.abbr);
     setAddress(tenant.address);
     setAddressEn(tenant.addressEn);
     setPhones(ensurePhoneRows(tenant.phones));
@@ -85,6 +92,12 @@ export default function CashSettingsPage() {
         return t("settings.companyEmailTooLong");
       case "emailInvalid":
         return t("settings.companyEmailInvalid");
+      case "abbrRequired":
+        return t("settings.companyAbbrRequired");
+      case "abbrTooLong":
+        return t("settings.companyAbbrTooLong");
+      case "abbrInvalid":
+        return t("settings.companyAbbrInvalid");
       default:
         return t("common.saveFailed");
     }
@@ -104,12 +117,14 @@ export default function CashSettingsPage() {
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    if (!canEdit) return;
     const profile = {
       address,
       addressEn,
       phones,
       contactPerson,
       email,
+      abbr,
     };
     const errors = validateCompanyProfile(profile);
     if (errors.length > 0) {
@@ -121,6 +136,7 @@ export default function CashSettingsPage() {
     updateTenant({
       name,
       nameEn,
+      abbr: normalizeCompanyAbbr(abbr),
       address: address.trim(),
       addressEn: addressEn.trim(),
       phones: normalizeCompanyPhones(phones),
@@ -135,6 +151,7 @@ export default function CashSettingsPage() {
   }
 
   function handleResetDemo() {
+    if (!canEdit) return;
     if (!window.confirm(t("settings.resetConfirm"))) return;
     setOpeningCash("100000");
     updateTenant({ openingCash: 100000 });
@@ -173,6 +190,7 @@ export default function CashSettingsPage() {
       <PageHeader title={t("settings.cashTitle")} />
 
       <form onSubmit={handleSave} className="space-y-4" noValidate>
+        <fieldset disabled={!canEdit} className="min-w-0 space-y-4 border-0 p-0">
         {/*
           桌面：左上 Logo / 左下资金 / 右侧企业信息跨两行
           移动：Logo → 企业信息 → 资金
@@ -183,6 +201,7 @@ export default function CashSettingsPage() {
               <CompanyLogoUploadField
                 value={logoUrl}
                 onChange={(next) => {
+                  if (!canEdit) return;
                   setLogoUrl(next);
                   setLogoError("");
                   updateTenant({ logoUrl: next });
@@ -190,6 +209,7 @@ export default function CashSettingsPage() {
                   window.setTimeout(() => setSaved(false), 2000);
                 }}
                 onError={setLogoError}
+                disabled={!canEdit}
               />
               {logoError ? (
                 <p className="text-xs text-danger" role="alert">
@@ -217,6 +237,28 @@ export default function CashSettingsPage() {
                     className={inputClass}
                     value={nameEn}
                     onChange={(e) => setNameEn(e.target.value)}
+                  />
+                </FormField>
+                <FormField
+                  label={t("settings.companyAbbr")}
+                  required
+                  hint={t("settings.companyAbbrHint")}
+                  error={fieldErrorText("abbr")}
+                >
+                  <input
+                    className={`${inputClass}${fieldErrorText("abbr") ? " is-error" : ""}`}
+                    value={abbr}
+                    maxLength={COMPANY_ABBR_MAX}
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder="YK"
+                    aria-invalid={Boolean(fieldErrorText("abbr"))}
+                    onChange={(e) => {
+                      setAbbr(e.target.value.toUpperCase());
+                      setFieldErrors((errs) =>
+                        errs.filter((x) => x.field !== "abbr"),
+                      );
+                    }}
                   />
                 </FormField>
                 <FormField
@@ -303,7 +345,7 @@ export default function CashSettingsPage() {
                       {phones.length < COMPANY_PHONE_MAX_COUNT ? (
                         <button
                           type="button"
-                          className="ui-btn-secondary h-9 text-sm"
+                          className="ui-btn-secondary text-sm"
                           onClick={addPhoneRow}
                         >
                           {t("settings.addPhone")}
@@ -382,16 +424,22 @@ export default function CashSettingsPage() {
                 </p>
               </div>
               <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border pt-4">
-                <button type="submit" className="ui-btn-primary h-10">
-                  {t("common.save")}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleResetDemo}
-                  className="ui-btn-secondary h-10"
-                >
-                  {t("settings.resetOpeningCash")}
-                </button>
+                {canEdit ? (
+                  <>
+                    <button type="submit" className="ui-btn-primary">
+                      {t("common.save")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleResetDemo}
+                      className="ui-btn-secondary"
+                    >
+                      {t("settings.resetOpeningCash")}
+                    </button>
+                  </>
+                ) : (
+                  <span className="text-sm text-muted">{t("permissions.levelRead")}</span>
+                )}
                 {saved ? (
                   <span className="text-sm text-success">{t("common.saved")}</span>
                 ) : null}
@@ -399,6 +447,7 @@ export default function CashSettingsPage() {
             </FormSection>
           </div>
         </div>
+        </fieldset>
       </form>
     </div>
   );

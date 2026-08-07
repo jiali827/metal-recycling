@@ -179,3 +179,13 @@ export const WeighTicketDetailModal = dynamic(
     })),
   { ssr: false },
 );
+
+export const SettlementDocCreateModal = dynamic(
+  () =>
+    import("@/features/settlement-docs/components/SettlementDocCreateModal").then(
+      (m) => ({
+        default: m.SettlementDocCreateModal,
+      }),
+    ),
+  { ssr: false },
+);

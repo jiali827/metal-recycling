@@ -10,13 +10,15 @@ export type RoleId =
 
 /** @deprecated 合同已拆为采购/销售两套实体；仅作方向/追溯视图兼容 */
 export type ContractType = "purchase" | "sale";
-export type PurchaseContractStatus = "draft" | "active" | "expired" | "closed";
-export type SaleContractStatus =
-  | "draft"
-  | "active"
-  | "fulfilling"
-  | "completed"
-  | "closed";
+export type PurchaseContractStatus = "draft" | "active" | "closed";
+export type SaleContractStatus = "draft" | "active" | "completed" | "closed";
+
+/** 采购合同有效性（由有效期相对今天自动派生，只读） */
+export type PurchaseValidity = "in_force" | "expired" | "no_expiry";
+
+/** 销售合同履约情况（由关联磅单与约量/容差自动派生，只读） */
+export type SaleFulfillmentPhase = "none" | "in_progress" | "ready" | "over";
+
 /** @deprecated 使用 PurchaseContractStatus / SaleContractStatus */
 export type ContractStatus = SaleContractStatus | PurchaseContractStatus;
 export type PurchasePriceMode = "ex_yard" | "collect" | "other";
@@ -39,6 +41,10 @@ export interface Tenant {
   id: string;
   name: string;
   nameEn: string;
+  /**
+   * 公司缩写（大写字母/数字），用于采购合同编号等：`Q-{abbr}-{年}-{流水}`
+   */
+  abbr: string;
   currency: string;
   openingCash: number;
   /** 公司 Logo（正方形 JPEG Data URL，演示环境本地存储） */
@@ -68,9 +74,21 @@ export interface User extends RecordTimestamps {
 
 export interface Customer extends RecordTimestamps {
   id: string;
+  /** 客户业务编号，如 C-00001 */
+  customerNo: string;
   name: string;
   category: string;
-  contact?: string;
+  contactName?: string;
+  phone?: string;
+  email?: string;
+  /** 地盘 / 工地名称 */
+  siteName?: string;
+  address?: string;
+  /** 开票抬头 */
+  invoiceTitle?: string;
+  /** 税号 */
+  taxNo?: string;
+  remarks?: string;
 }
 
 export interface CustomerCategory extends RecordTimestamps {
@@ -202,10 +220,56 @@ export interface WeighTicket extends RecordTimestamps {
   remarks?: string;
 }
 
+/** 过磅汇总结算单（採購單 / 銷售單），供财务线下审批 */
+export type WeighSettlementKind = "purchase" | "sale";
+/** pending=待确认可编辑；confirmed=已确认锁定并作为应收/应付目标 */
+export type WeighSettlementStatus = "pending" | "confirmed";
+
+export interface WeighSettlementLine {
+  ticketId: string;
+  bxNo: string;
+  /** 过磅日期 YYYY-MM-DD */
+  date: string;
+  plate: string;
+  materialSummary: string;
+  grossKg: number;
+  deductionKg: number;
+  netKg: number;
+  unitPrice: number;
+  amount: number;
+}
+
+export interface WeighSettlementDoc extends RecordTimestamps {
+  id: string;
+  no: string;
+  kind: WeighSettlementKind;
+  customerName: string;
+  /** 采购=采购合同 id；销售=销售合同 id */
+  contractId: string;
+  contractNo: string;
+  docDate: string;
+  status: WeighSettlementStatus;
+  ticketIds: string[];
+  lines: WeighSettlementLine[];
+  totalNetKg: number;
+  totalAmount: number;
+  /** 财务确认时间（YYYY-MM-DDTHH:mm） */
+  confirmedAt?: string;
+  /** 确认人（演示环境写当前用户名） */
+  confirmedBy?: string;
+  /** 财务签字扫描件备份（可选，演示环境存 Data URL） */
+  attachmentName?: string;
+  attachmentDataUrl?: string;
+}
+
+/** 应收/应付目标：一对一挂已确认结算单 */
 export interface ArApItem extends RecordTimestamps {
   id: string;
-  ticketBxNo: string;
+  settlementDocId: string;
+  settlementDocNo: string;
   customerName: string;
+  contractId?: string;
+  contractNo?: string;
   amount: number;
   settledAmount: number;
   balance: number;
@@ -226,8 +290,11 @@ export interface PaymentRecord extends RecordTimestamps {
   counterparty: string;
   /** 核销摘要（往来）或杂项说明 */
   allocationSummary: string;
-  /** 往来核销关联的磅单 BX（category=settlement） */
-  ticketBxNo?: string;
+  /** 往来核销关联的结算单（category=settlement） */
+  settlementDocId?: string;
+  settlementDocNo?: string;
+  /** 冗余：合同编号（由结算目标带出） */
+  contractNo?: string;
   /** 杂项类别，仅 category=misc 时使用 */
   miscKind?: PaymentMiscKind;
 }

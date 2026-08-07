@@ -29,12 +29,17 @@ import {
 } from "@phosphor-icons/react";
 import { useAuth } from "@/features/auth/provider";
 import { useI18n, type Locale } from "@/shared/i18n";
-import { getMenuPermissionLevel, isMenuPermissionFilterEnabled } from "@/shared/config/menu-permissions";
+import {
+  isMenuPermissionFilterEnabled,
+  useResolvedAccess,
+} from "@/shared/config/menu-permissions";
+import { getModuleMenuLevel } from "@/shared/config/permissions";
+import { getCompanyDisplayName } from "@/shared/config/company";
 import { menuGroups, menuItems, type MenuIconKey } from "@/shared/config/menu";
 import { ProfileEditModal, PasswordChangeModal } from "@/features/settings/components/AccountModals";
 import { UserAvatar } from "@/shared/ui/AvatarUploadField";
 import { CompanyLogoMark } from "@/shared/ui/CompanyLogo";
-import { ThemeColorPicker } from "./ThemeColorPicker";
+import { ThemeColorMenuItem } from "./ThemeColorPicker";
 
 const iconMap: Record<MenuIconKey, Icon> = {
   house: House,
@@ -63,8 +68,10 @@ export function Sidebar() {
   const router = useRouter();
   const { user, tenant, logout } = useAuth();
   const { t, locale, setLocale } = useI18n();
+  const access = useResolvedAccess();
   const [menuOpen, setMenuOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
+  const [themeOpen, setThemeOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -74,11 +81,13 @@ export function Sidebar() {
       if (!menuRef.current?.contains(e.target as Node)) {
         setMenuOpen(false);
         setLangOpen(false);
+        setThemeOpen(false);
       }
     }
     function onKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         setLangOpen(false);
+        setThemeOpen(false);
         setMenuOpen(false);
       }
     }
@@ -90,8 +99,15 @@ export function Sidebar() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!menuOpen) {
+      setLangOpen(false);
+      setThemeOpen(false);
+    }
+  }, [menuOpen]);
+
   return (
-    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-border bg-sidebar">
+    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-border bg-sidebar print:hidden">
       <div className="shrink-0 px-5 py-5">
         <div className="flex items-center gap-2.5">
           <CompanyLogoMark framed logoUrl={tenant.logoUrl} />
@@ -99,11 +115,10 @@ export function Sidebar() {
             <div className="truncate text-sm font-semibold text-foreground">
               {t("app.name")}
             </div>
-            <div className="truncate text-[11px] text-muted" title={tenant.name}>
-              {tenant.name}
+            <div className="truncate text-[11px] text-muted" title={getCompanyDisplayName(locale)}>
+              {getCompanyDisplayName(locale)}
             </div>
           </div>
-          <ThemeColorPicker />
         </div>
       </div>
 
@@ -114,7 +129,9 @@ export function Sidebar() {
           const items = menuItems.filter((item) => item.group === group.id);
           if (items.length === 0) return null;
           const visibleItems = isMenuPermissionFilterEnabled()
-            ? items.filter((item) => getMenuPermissionLevel(item.moduleId) !== "none")
+            ? items.filter(
+                (item) => getModuleMenuLevel(access, item.moduleId) !== "none",
+              )
             : items;
           if (visibleItems.length === 0) return null;
           return (
@@ -135,7 +152,7 @@ export function Sidebar() {
                     pathname === item.href ||
                     pathname.startsWith(`${item.href}/`);
                   const ItemIcon = iconMap[item.icon];
-                  const permLevel = getMenuPermissionLevel(item.moduleId);
+                  const permLevel = getModuleMenuLevel(access, item.moduleId);
                   return (
                     <Link
                       key={item.href}
@@ -147,7 +164,7 @@ export function Sidebar() {
                         active
                           ? "bg-sidebar-active font-medium text-brand"
                           : "text-foreground/75 hover:bg-chip hover:text-foreground"
-                      }${permLevel === "read" ? " is-read" : ""}`}
+                      }`}
                     >
                       <ItemIcon
                         size={18}
@@ -155,9 +172,6 @@ export function Sidebar() {
                         className="shrink-0"
                       />
                       <span className="min-w-0 flex-1 truncate">{t(item.labelKey)}</span>
-                      {permLevel === "read" ? (
-                        <span className="ui-nav-perm-badge">{t("permissions.levelRead")}</span>
-                      ) : null}
                     </Link>
                   );
                 })}
@@ -173,6 +187,7 @@ export function Sidebar() {
           onClick={() => {
             setMenuOpen((v) => !v);
             setLangOpen(false);
+            setThemeOpen(false);
           }}
           className="flex w-full items-center gap-3 rounded-[8px] px-2 py-2 text-left transition hover:bg-chip"
           aria-expanded={menuOpen}
@@ -204,7 +219,10 @@ export function Sidebar() {
                 type="button"
                 role="menuitem"
                 className={`ui-panel-option${langOpen ? " is-highlighted" : ""}`}
-                onClick={() => setLangOpen((v) => !v)}
+                onClick={() => {
+                  setThemeOpen(false);
+                  setLangOpen((v) => !v);
+                }}
                 aria-expanded={langOpen}
                 aria-haspopup="menu"
               >
@@ -248,6 +266,14 @@ export function Sidebar() {
                 </div>
               ) : null}
             </div>
+
+            <ThemeColorMenuItem
+              open={themeOpen}
+              onOpenChange={(next) => {
+                setLangOpen(false);
+                setThemeOpen(next);
+              }}
+            />
 
             <button
               type="button"

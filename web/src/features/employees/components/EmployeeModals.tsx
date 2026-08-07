@@ -180,10 +180,12 @@ export function EmployeeDetailModal({
   open,
   onClose,
   id,
+  readOnly = false
 }: {
   open: boolean;
   onClose: () => void;
   id: string | null;
+  readOnly?: boolean;
 }) {
   const { t } = useI18n();
   const confirm = useConfirm();
@@ -215,6 +217,7 @@ export function EmployeeDetailModal({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (readOnly) return;
     if (!row) return;
     const normalized = buildEmployeeRoles(roleIds, roles);
     if (normalized.length === 0) {
@@ -230,7 +233,7 @@ export function EmployeeDetailModal({
   }
 
   async function handleResetPassword() {
-    if (!row) return;
+    if (readOnly || !row) return;
     const ok = await confirm({
       title: t("employees.resetPasswordConfirmTitle"),
       message: t("employees.resetPasswordConfirm", {
@@ -254,20 +257,26 @@ export function EmployeeDetailModal({
       footer={
         row ? (
           <div className="flex w-full items-center justify-between gap-3">
-            <button
-              type="button"
-              className="ui-btn-secondary h-8 px-3 text-xs text-muted hover:border-danger/35 hover:bg-red-50/60 hover:text-danger"
-              onClick={() => void handleResetPassword()}
-            >
-              {t("employees.resetPassword")}
-            </button>
+            {!readOnly ? (
+              <button
+                type="button"
+                className="ui-btn-secondary h-8 px-3 text-xs text-muted hover:border-danger/35 hover:bg-red-50/60 hover:text-danger"
+                onClick={() => void handleResetPassword()}
+              >
+                {t("employees.resetPassword")}
+              </button>
+            ) : (
+              <span />
+            )}
             <div className="flex items-center gap-2">
               <button type="button" className="ui-btn-secondary" onClick={onClose}>
                 {t("common.close")}
               </button>
-              <button type="submit" form="employee-edit-form" className="ui-btn-primary">
+              {!readOnly ? (
+            <button type="submit" form="employee-edit-form" className="ui-btn-primary">
                 {t("common.save")}
               </button>
+          ) : null}
             </div>
           </div>
         ) : (
@@ -281,9 +290,10 @@ export function EmployeeDetailModal({
         <p className="text-sm text-muted">{t("common.notFoundHint")}</p>
       ) : (
         <form id="employee-edit-form" className="space-y-4" onSubmit={handleSubmit}>
+          <fieldset disabled={readOnly} className="min-w-0 space-y-4 border-0 p-0">
           <FormFieldGrid>
-            <FormField label={t("form.displayName")} required>
-              <input className={inputClass} required value={name} onChange={(e) => setName(e.target.value)} />
+            <FormField label={t("form.displayName")} required={!readOnly}>
+              <input className={inputClass} required={!readOnly} value={name} onChange={(e) => setName(e.target.value)} />
             </FormField>
             <FormField
               label={t("form.email")}
@@ -325,6 +335,7 @@ export function EmployeeDetailModal({
           {passwordReset ? (
             <p className="text-sm text-success">{t("employees.resetPasswordSuccess")}</p>
           ) : null}
+          </fieldset>
         </form>
       )}
     </Modal>

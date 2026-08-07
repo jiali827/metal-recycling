@@ -9,13 +9,15 @@ import { TextInputCaretEnd } from "@/shared/ui/TextInputCaretEnd";
 import { DocumentTitle } from "@/shared/layout/DocumentTitle";
 import {
   buildDocumentTitleBootScript,
+  buildLocaleBootScript,
   rootDocumentTitleMetadata,
 } from "@/shared/config/route-titles";
+import { COMPANY_NAME_ZH_HANT } from "@/shared/config/company";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: rootDocumentTitleMetadata(),
-  description: "寶新建築材料有限公司 · 金屬回收管理系統",
+  description: `${COMPANY_NAME_ZH_HANT} · 金屬回收管理系統`,
 };
 
 export default function RootLayout({
@@ -26,6 +28,7 @@ export default function RootLayout({
   return (
     <html lang="zh-Hant" suppressHydrationWarning>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: buildLocaleBootScript() }} />
         <script dangerouslySetInnerHTML={{ __html: buildDocumentTitleBootScript() }} />
         <script dangerouslySetInnerHTML={{ __html: THEME_BOOT_SCRIPT }} />
       </head>

@@ -188,21 +188,18 @@ function defineAccess(partial: Partial<RoleAccessMap>): RoleAccessMap {
   return base;
 }
 
-/** 内置五类角色的权限模板（对齐一期权限矩阵） */
+/** 系统管理员：全部模块最高可用权限（按模块 actions 全集） */
+function createAdminFullAccess(): RoleAccessMap {
+  const access = createEmptyAccess();
+  for (const mod of PERMISSION_MODULES) {
+    access[mod.id] = buildModuleAccess(mod, [...mod.actions]);
+  }
+  return access;
+}
+
+/** 内置五类角色的权限模板（对齐一期权限矩阵；管理员为全量可写） */
 export const BUILTIN_ROLE_ACCESS: Record<RoleId, RoleAccessMap> = {
-  admin: defineAccess({
-    dashboard: { menu: "read", buttons: ["view"] },
-    transactions: { menu: "read", buttons: ["view"] },
-    contracts: { menu: "read", buttons: ["view"] },
-    weighTickets: { menu: "read", buttons: ["view"] },
-    payments: { menu: "read", buttons: ["view"] },
-    customers: { menu: "write", buttons: ["view", "create", "edit", "delete"] },
-    materialTypes: { menu: "write", buttons: ["view", "create", "edit", "delete"] },
-    projectTypes: { menu: "write", buttons: ["view", "create", "edit", "delete"] },
-    employees: { menu: "write", buttons: ["view", "create", "edit", "delete"] },
-    roles: { menu: "write", buttons: ["view", "create", "edit", "delete"] },
-    settings: { menu: "write", buttons: ["view", "edit"] },
-  }),
+  admin: createAdminFullAccess(),
   contract: defineAccess({
     contracts: {
       menu: "write",
@@ -308,6 +305,47 @@ export function accessToPermissionSummary(access: RoleAccessMap): string[] {
 
 export function formatAccessSummary(access: RoleAccessMap): string {
   return accessToPermissionSummary(access).join(" · ");
+}
+
+const MENU_RANK: Record<PermissionLevel, number> = {
+  none: 0,
+  read: 1,
+  write: 2,
+};
+
+/** 多角色权限并集：菜单取最高级别，按钮取并集 */
+export function mergeAccessMaps(maps: RoleAccessMap[]): RoleAccessMap {
+  if (maps.length === 0) return createEmptyAccess();
+  if (maps.length === 1) return normalizeAccess(maps[0]);
+
+  const merged = createEmptyAccess();
+  for (const mod of PERMISSION_MODULES) {
+    const buttons = new Set<ButtonActionId>();
+    let menu: PermissionLevel = "none";
+    for (const map of maps) {
+      const entry = map[mod.id];
+      if (!entry) continue;
+      if (MENU_RANK[entry.menu] > MENU_RANK[menu]) menu = entry.menu;
+      for (const b of entry.buttons) buttons.add(b);
+    }
+    merged[mod.id] = buildModuleAccess(mod, [...buttons]);
+  }
+  return merged;
+}
+
+export function canModuleAction(
+  access: RoleAccessMap,
+  moduleId: ModuleId,
+  action: ButtonActionId,
+): boolean {
+  return access[moduleId]?.buttons.includes(action) ?? false;
+}
+
+export function getModuleMenuLevel(
+  access: RoleAccessMap,
+  moduleId: ModuleId,
+): PermissionLevel {
+  return access[moduleId]?.menu ?? "none";
 }
 
 export function getModuleDef(moduleId: ModuleId): PermissionModuleDef {

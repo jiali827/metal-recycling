@@ -14,6 +14,7 @@ export function CustomerCategoryFormModal({
   usageCount,
   onSubmit,
   duplicateError,
+  readOnly = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -23,6 +24,7 @@ export function CustomerCategoryFormModal({
   usageCount?: number;
   onSubmit: (name: string) => boolean;
   duplicateError?: string;
+  readOnly?: boolean;
 }) {
   const { t } = useI18n();
   const [name, setName] = useState(initialName);
@@ -36,6 +38,7 @@ export function CustomerCategoryFormModal({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (readOnly) return;
     const trimmed = name.trim();
     if (!trimmed) {
       setError(t("customers.categoryNameRequired"));
@@ -56,20 +59,24 @@ export function CustomerCategoryFormModal({
       footer={
         <>
           <button type="button" className="ui-btn-secondary" onClick={onClose}>
-            {t("common.cancel")}
+            {readOnly ? t("common.close") : t("common.cancel")}
           </button>
-          <button type="submit" form={formId} className="ui-btn-primary">
-            {t("common.save")}
-          </button>
+          {!readOnly ? (
+            <button type="submit" form={formId} className="ui-btn-primary">
+              {t("common.save")}
+            </button>
+          ) : null}
         </>
       }
     >
       <form id={formId} className="space-y-3" onSubmit={handleSubmit}>
-        <FormField label={t("customers.categoryColName")} required>
+        <FormField label={t("customers.categoryColName")} required={!readOnly}>
           <input
             className={inputClass}
-            required
+            required={!readOnly}
             value={name}
+            readOnly={readOnly}
+            disabled={readOnly}
             onChange={(e) => {
               setName(e.target.value);
               setError("");

@@ -11,6 +11,7 @@ export function useMoneyUnits() {
     return {
       money: symbol,
       moneyPerKg: `${symbol}/KG`,
+      moneyPerTon: (tonLabel: string) => `${symbol}/${tonLabel}`,
       code: tenant.currency,
     };
   }, [tenant.currency]);

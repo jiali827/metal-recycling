@@ -18,6 +18,8 @@ export interface ConfirmOptions {
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
+  /** 仅提示：只显示确定，无取消（替代 window.alert） */
+  alert?: boolean;
 }
 
 type ConfirmFn = (options: ConfirmOptions) => Promise<boolean>;
@@ -45,35 +47,49 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(() => confirm, [confirm]);
+  const isAlert = Boolean(options.alert);
+  const title =
+    options.title ??
+    (isAlert ? t("common.tipTitle") : t("common.confirmTitle"));
 
   return (
     <ConfirmContext.Provider value={value}>
       {children}
       <Modal
         open={open}
-        onClose={() => settle(false)}
-        title={options.title ?? t("common.confirmTitle")}
+        onClose={() => settle(isAlert ? true : false)}
+        title={title}
         size="md"
         footer={
-          <>
+          isAlert ? (
             <button
               type="button"
-              className="ui-btn-secondary"
-              onClick={() => settle(false)}
-            >
-              {options.cancelLabel ?? t("common.cancel")}
-            </button>
-            <button
-              type="button"
-              className={options.danger ? "ui-btn-danger" : "ui-btn-primary"}
+              className="ui-btn-primary"
               onClick={() => settle(true)}
             >
               {options.confirmLabel ?? t("common.confirm")}
             </button>
-          </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="ui-btn-secondary"
+                onClick={() => settle(false)}
+              >
+                {options.cancelLabel ?? t("common.cancel")}
+              </button>
+              <button
+                type="button"
+                className={options.danger ? "ui-btn-danger" : "ui-btn-primary"}
+                onClick={() => settle(true)}
+              >
+                {options.confirmLabel ?? t("common.confirm")}
+              </button>
+            </>
+          )
         }
       >
-        <p className="text-sm leading-relaxed text-foreground/90">
+        <p className="whitespace-pre-line text-sm leading-relaxed text-foreground/90">
           {options.message}
         </p>
       </Modal>

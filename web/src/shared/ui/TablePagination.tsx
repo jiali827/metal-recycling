@@ -44,6 +44,9 @@ interface TablePaginationProps {
   onPageChange: (page: number) => void;
   onPageSizeChange: (size: number) => void;
   pageSizeOptions?: readonly number[];
+  /** 表格底栏完整控件；卡片网格等场景用 compact 减少占位 */
+  variant?: "default" | "compact";
+  className?: string;
 }
 
 export function TablePagination({
@@ -53,7 +56,10 @@ export function TablePagination({
   onPageChange,
   onPageSizeChange,
   pageSizeOptions = PAGE_SIZE_OPTIONS,
+  variant = "default",
+  className,
 }: TablePaginationProps) {
+  const isCompact = variant === "compact";
   const { t } = useI18n();
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const from = total === 0 ? 0 : (page - 1) * pageSize + 1;
@@ -88,7 +94,10 @@ export function TablePagination({
   }
 
   return (
-    <div className="ui-table-pagination">
+    <nav
+      className={`ui-table-pagination${isCompact ? " is-compact" : ""}${className ? ` ${className}` : ""}`}
+      aria-label={t("pagination.nav")}
+    >
       <div className="ui-table-pagination-meta">
         <span>
           {t("pagination.total", { count: total })}
@@ -101,6 +110,7 @@ export function TablePagination({
           <span className="sr-only">{t("pagination.pageSize")}</span>
           <Select
             size="sm"
+            allowClear={false}
             value={String(pageSize)}
             onChange={(value) => onPageSizeChange(Number(value))}
             options={pageSizeOptions.map((size) => ({
@@ -111,65 +121,75 @@ export function TablePagination({
           />
         </label>
 
-        <button
-          type="button"
-          disabled={page <= 1}
-          onClick={() => onPageChange(page - 1)}
-          className="ui-table-pagination-btn"
-          aria-label={t("pagination.prev")}
-        >
-          <CaretLeft size={14} />
-        </button>
+        <div className="ui-table-pagination-nav">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => onPageChange(page - 1)}
+            className="ui-table-pagination-btn"
+            aria-label={t("pagination.prev")}
+          >
+            <CaretLeft size={14} />
+          </button>
 
-        <div className="ui-table-pagination-pages" role="navigation" aria-label={t("pagination.nav")}>
-          {pageItems.map((item, index) =>
-            item === "ellipsis" ? (
-              <span key={`ellipsis-${index}`} className="ui-table-pagination-ellipsis">
-                …
-              </span>
-            ) : (
-              <button
-                key={item}
-                type="button"
-                className={`ui-table-pagination-page${item === page ? " is-active" : ""}`}
-                onClick={() => onPageChange(item)}
-                aria-current={item === page ? "page" : undefined}
-              >
-                {item}
-              </button>
-            ),
+          {isCompact ? (
+            <span className="ui-table-pagination-indicator">
+              {t("pagination.page", { page, total: totalPages })}
+            </span>
+          ) : (
+            <div className="ui-table-pagination-pages">
+              {pageItems.map((item, index) =>
+                item === "ellipsis" ? (
+                  <span key={`ellipsis-${index}`} className="ui-table-pagination-ellipsis">
+                    …
+                  </span>
+                ) : (
+                  <button
+                    key={item}
+                    type="button"
+                    className={`ui-table-pagination-page${item === page ? " is-active" : ""}`}
+                    onClick={() => onPageChange(item)}
+                    aria-current={item === page ? "page" : undefined}
+                  >
+                    {item}
+                  </button>
+                ),
+              )}
+            </div>
           )}
-        </div>
 
-        <button
-          type="button"
-          disabled={page >= totalPages}
-          onClick={() => onPageChange(page + 1)}
-          className="ui-table-pagination-btn"
-          aria-label={t("pagination.next")}
-        >
-          <CaretRight size={14} />
-        </button>
-
-        <div className="ui-table-pagination-jump">
-          <span>{t("pagination.goto")}</span>
-          <input
-            type="number"
-            min={1}
-            max={totalPages}
-            value={jumpValue}
-            onChange={(e) => setJumpValue(e.target.value)}
-            onKeyDown={onJumpKeyDown}
-            onBlur={commitJump}
-            className="ui-table-pagination-jump-input"
-            aria-label={t("pagination.gotoPage")}
-          />
-          <span>{t("pagination.gotoPage")}</span>
-          <button type="button" className="ui-table-pagination-jump-btn" onClick={commitJump}>
-            {t("pagination.jump")}
+          <button
+            type="button"
+            disabled={page >= totalPages}
+            onClick={() => onPageChange(page + 1)}
+            className="ui-table-pagination-btn"
+            aria-label={t("pagination.next")}
+          >
+            <CaretRight size={14} />
           </button>
         </div>
+
+        {!isCompact && (
+          <div className="ui-table-pagination-jump">
+            <span>{t("pagination.goto")}</span>
+            <input
+              type="number"
+              min={1}
+              max={totalPages}
+              value={jumpValue}
+              onChange={(e) => setJumpValue(e.target.value)}
+              onKeyDown={onJumpKeyDown}
+              onBlur={commitJump}
+              className="ui-table-pagination-jump-input"
+              aria-label={t("pagination.gotoPage")}
+            />
+            <span>{t("pagination.gotoPage")}</span>
+            <button type="button" className="ui-table-pagination-jump-btn" onClick={commitJump}>
+              {t("pagination.jump")}
+            </button>
+          </div>
+        )}
       </div>
-    </div>
+    </nav>
   );
 }

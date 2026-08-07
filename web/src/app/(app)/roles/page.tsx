@@ -4,7 +4,10 @@ import { useMemo, useState } from "react";
 import { ListPageLayout } from "@/shared/layout/ListPageLayout";
 import { PageHeader } from "@/shared/ui/PageHeader";
 import { DataTable, type Column } from "@/shared/ui/DataTable";
-import { PrimaryButton, RowActions } from "@/shared/ui/CrudUi";
+import {
+  PrimaryButton,
+  RowActions
+} from "@/shared/ui/CrudUi";
 import { StatusBadge } from "@/shared/ui/StatusBadge";
 import { useConfirm } from "@/shared/ui/ConfirmDialog";
 import { RoleCreateModal, RoleDetailModal } from "@/features/lazy-modals";
@@ -16,10 +19,12 @@ import {
   useI18n,
 } from "@/shared/i18n";
 import { useMockStore } from "@/data/mock/store";
+import { useModulePermission } from "@/shared/config/menu-permissions";
 import type { RoleDef } from "@/entities/types";
 
 export default function RolesPage() {
   const { t, locale } = useI18n();
+  const perm = useModulePermission("roles");
   const { roles, removeRole } = useMockStore();
   const confirm = useConfirm();
   const [createOpen, setCreateOpen] = useState(false);
@@ -66,7 +71,7 @@ export default function RolesPage() {
       render: (r) => (
         <RowActions
           onDetail={() => setDetailId(r.id)}
-          onDelete={() => void handleDelete(r)}
+          onDelete={perm.canDelete ? () => void handleDelete(r) : undefined}
         />
       ),
     },
@@ -76,9 +81,9 @@ export default function RolesPage() {
     <ListPageLayout>
       <PageHeader
         title={t("roles.title")}
-        actions={
+        actions={perm.canCreate ? (
           <PrimaryButton onClick={() => setCreateOpen(true)}>{t("roles.new")}</PrimaryButton>
-        }
+        ) : null}
       />
       <DataTable fillHeight
         columns={columns}
@@ -94,7 +99,7 @@ export default function RolesPage() {
         />
       ) : null}
       {detailId ? (
-        <RoleDetailModal
+        <RoleDetailModal readOnly={!perm.canEdit}
           open
           onClose={() => setDetailId(null)}
           id={detailId}

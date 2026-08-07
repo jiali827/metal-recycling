@@ -77,15 +77,18 @@ export function CompanyLogoUploadField({
   value,
   onChange,
   onError,
+  disabled = false,
 }: {
   value?: string;
   onChange: (next: string | undefined) => void;
   onError: (message: string) => void;
+  disabled?: boolean;
 }) {
   const { t } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
+    if (disabled) return;
     try {
       const dataUrl = await processLogoFile(file);
       onChange(dataUrl);
@@ -98,12 +101,13 @@ export function CompanyLogoUploadField({
   }
 
   return (
-    <div className="ui-logo-upload">
+    <div className={`ui-logo-upload${disabled ? " opacity-60" : ""}`}>
       <button
         type="button"
         className="ui-logo-upload-preview"
-        onClick={() => inputRef.current?.click()}
+        onClick={() => !disabled && inputRef.current?.click()}
         aria-label={t("settings.logoChange")}
+        disabled={disabled}
       >
         {value ? (
           <img src={value} alt="" className="ui-logo-upload-img" />
@@ -118,7 +122,8 @@ export function CompanyLogoUploadField({
         <button
           type="button"
           className="ui-logo-upload-action"
-          onClick={() => inputRef.current?.click()}
+          onClick={() => !disabled && inputRef.current?.click()}
+          disabled={disabled}
         >
           {t("settings.logoChange")}
         </button>
@@ -126,7 +131,8 @@ export function CompanyLogoUploadField({
           <button
             type="button"
             className="ui-logo-upload-action ui-logo-upload-action--muted"
-            onClick={() => onChange(undefined)}
+            onClick={() => !disabled && onChange(undefined)}
+            disabled={disabled}
           >
             {t("settings.logoRemove")}
           </button>

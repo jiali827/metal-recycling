@@ -8,9 +8,13 @@ import { StatusBadge } from "@/shared/ui/StatusBadge";
 import {
   FilterBar,
   FilterField,
-  filterControlClass,
 } from "@/shared/ui/FilterBar";
-import { PrimaryButton, RowActions, SegmentedControl } from "@/shared/ui/CrudUi";
+import {
+  PrimaryButton,
+  RowActions,
+  SegmentedControl,
+  TextInput
+} from "@/shared/ui/CrudUi";
 import { useConfirm } from "@/shared/ui/ConfirmDialog";
 import {
   ProjectTypeCreateModal,
@@ -20,12 +24,14 @@ import { deleteConfirmMessage } from "@/shared/lib/confirm-delete";
 import { auditColumns, sortByCreatedAtDesc } from "@/shared/lib/list-columns";
 import { useI18n } from "@/shared/i18n";
 import { useMockStore } from "@/data/mock/store";
+import { useModulePermission } from "@/shared/config/menu-permissions";
 import type { ProjectType } from "@/entities/types";
 
 type EnabledFilter = "all" | "enabled" | "disabled";
 
 export default function ProjectTypesPage() {
   const { t } = useI18n();
+  const perm = useModulePermission("projectTypes");
   const { projectTypes, removeProjectType } = useMockStore();
   const confirm = useConfirm();
   const [keyword, setKeyword] = useState("");
@@ -85,7 +91,7 @@ export default function ProjectTypesPage() {
       render: (r) => (
         <RowActions
           onDetail={() => setDetailId(r.id)}
-          onDelete={() => void handleDelete(r)}
+          onDelete={perm.canDelete ? () => void handleDelete(r) : undefined}
         />
       ),
     },
@@ -95,16 +101,16 @@ export default function ProjectTypesPage() {
     <ListPageLayout>
       <PageHeader
         title={t("projectTypes.title")}
-        actions={
+        actions={perm.canCreate ? (
           <PrimaryButton onClick={() => setCreateOpen(true)}>
             {t("projectTypes.new")}
           </PrimaryButton>
-        }
+        ) : null}
       />
       <FilterBar>
         <FilterField label={t("common.keyword")}>
-          <input
-            className={filterControlClass}
+          <TextInput
+            size="sm"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder={t("form.keywordProject")}
@@ -135,7 +141,7 @@ export default function ProjectTypesPage() {
         />
       ) : null}
       {detailId ? (
-        <ProjectTypeDetailModal
+        <ProjectTypeDetailModal readOnly={!perm.canEdit}
           open
           onClose={() => setDetailId(null)}
           id={detailId}

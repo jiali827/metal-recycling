@@ -19,6 +19,7 @@ import {
   CaretRight,
 } from "@phosphor-icons/react";
 import { useI18n } from "@/shared/i18n";
+import { ControlClearButton } from "./ControlClearButton";
 
 interface DateRangePickerProps {
   start: string;
@@ -27,6 +28,8 @@ interface DateRangePickerProps {
   disabled?: boolean;
   size?: "sm" | "md";
   error?: boolean;
+  /** 有值时在右侧显示清空 X，默认开启 */
+  allowClear?: boolean;
   placeholder?: string;
   className?: string;
   id?: string;
@@ -109,6 +112,7 @@ export function DateRangePicker({
   disabled,
   size = "md",
   error,
+  allowClear = true,
   placeholder,
   className = "",
   id,
@@ -138,7 +142,7 @@ export function DateRangePicker({
   });
   const [panelStyle, setPanelStyle] = useState<CSSProperties>({});
   const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const leftMonth = { year: viewYear, month: viewMonth };
@@ -244,7 +248,7 @@ export function DateRangePicker({
     setViewMonth(next.month);
   }
 
-  function onKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
+  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     if (disabled) return;
     if (
       !open &&
@@ -372,8 +376,14 @@ export function DateRangePicker({
     );
   }
 
-  const hasValue = Boolean(start && end);
-  const display = hasValue ? `${start} — ${end}` : resolvedPlaceholder;
+  const hasValue = Boolean(start || end);
+  const display =
+    start && end
+      ? `${start} — ${end}`
+      : start
+        ? `${start} — …`
+        : resolvedPlaceholder;
+  const showClear = Boolean(allowClear && hasValue && !disabled);
 
   const panel =
     open && typeof document !== "undefined"
@@ -413,11 +423,12 @@ export function DateRangePicker({
 
   return (
     <div ref={rootRef} className={`relative ${className}`}>
-      <button
+      <div
         ref={triggerRef}
-        type="button"
+        role="button"
+        tabIndex={disabled ? -1 : 0}
         id={id}
-        disabled={disabled}
+        aria-disabled={disabled || undefined}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label={ariaLabel ?? t("form.pickDateRange")}
@@ -428,12 +439,17 @@ export function DateRangePicker({
         onKeyDown={onKeyDown}
       >
         <span
-          className={`ui-control-value tabular-nums${hasValue ? "" : " is-placeholder"}`}
+          className={`ui-control-value tabular-nums${start && end ? "" : " is-placeholder"}`}
         >
           {display}
         </span>
-        <CalendarBlank size={16} className="shrink-0 text-muted" />
-      </button>
+        <span className="ui-control-suffix">
+          {showClear ? (
+            <ControlClearButton onClear={() => onChange("", "")} />
+          ) : null}
+          <CalendarBlank size={16} className="shrink-0 text-muted" aria-hidden />
+        </span>
+      </div>
       {panel}
     </div>
   );

@@ -8,9 +8,14 @@ import { StatusBadge } from "@/shared/ui/StatusBadge";
 import {
   FilterBar,
   FilterField,
-  filterControlClass,
 } from "@/shared/ui/FilterBar";
-import { PrimaryButton, RowActions, Select } from "@/shared/ui/CrudUi";
+import {
+  DateRangePicker,
+  PrimaryButton,
+  RowActions,
+  Select,
+  TextInput
+} from "@/shared/ui/CrudUi";
 import { useConfirm } from "@/shared/ui/ConfirmDialog";
 import {
   WeighTicketCreateModal,
@@ -23,23 +28,83 @@ import { auditColumns, sortByCreatedAtDesc } from "@/shared/lib/list-columns";
 import { useI18n } from "@/shared/i18n";
 import { fieldLabels, ticketStatusLabel } from "@/shared/i18n/labels";
 import { useMockStore } from "@/data/mock/store";
+import { useModulePermission } from "@/shared/config/menu-permissions";
 import type { WeighTicket } from "@/entities/types";
+
+function weighDateKey(value: string): string {
+  if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "";
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 
 export default function WeighTicketsPage() {
   const { t } = useI18n();
-  const { weighTickets, removeWeighTicket } = useMockStore();
+  const perm = useModulePermission("weighTickets");
+  const {
+    weighTickets,
+    removeWeighTicket,
+    customers,
+    materialTypes,
+  } = useMockStore();
   const confirm = useConfirm();
   const [keyword, setKeyword] = useState("");
   const [direction, setDirection] = useState("all");
   const [status, setStatus] = useState("all");
+  const [dateStart, setDateStart] = useState("");
+  const [dateEnd, setDateEnd] = useState("");
+  const [customer, setCustomer] = useState("all");
+  const [material, setMaterial] = useState("all");
+  const [contractNo, setContractNo] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
 
+  const customerOptions = useMemo(() => {
+    const names = [...new Set(customers.map((c) => c.name))].sort((a, b) =>
+      a.localeCompare(b, "zh-HK"),
+    );
+    return [
+      { value: "all", label: t("common.all") },
+      ...names.map((name) => ({ value: name, label: name })),
+    ];
+  }, [customers, t]);
+
+  const materialOptions = useMemo(() => {
+    const fromMaster = materialTypes
+      .filter((m) => m.enabled)
+      .map((m) => m.name);
+    const fromTickets = weighTickets
+      .map((r) => r.materialSummary)
+      .filter((name) => name && name !== "—");
+    const names = [...new Set([...fromMaster, ...fromTickets])].sort((a, b) =>
+      a.localeCompare(b, "zh-HK"),
+    );
+    return [
+      { value: "all", label: t("common.all") },
+      ...names.map((name) => ({ value: name, label: name })),
+    ];
+  }, [materialTypes, weighTickets, t]);
+
   const rows = useMemo(() => {
+    const contractQ = contractNo.trim().toLowerCase();
     return sortByCreatedAtDesc(
       weighTickets.filter((row) => {
         if (direction !== "all" && row.direction !== direction) return false;
         if (status !== "all" && row.status !== status) return false;
+        if (customer !== "all" && row.customerName !== customer) return false;
+        if (material !== "all" && row.materialSummary !== material) return false;
+        if (contractQ && !row.contractNo.toLowerCase().includes(contractQ)) {
+          return false;
+        }
+        if (dateStart || dateEnd) {
+          const day = weighDateKey(row.date);
+          if (!day) return false;
+          if (dateStart && day < dateStart) return false;
+          if (dateEnd && day > dateEnd) return false;
+        }
         if (
           keyword &&
           !`${row.bxNo}${row.customerName}${row.plate}${row.materialSummary}`
@@ -51,7 +116,17 @@ export default function WeighTicketsPage() {
         return true;
       }),
     );
-  }, [weighTickets, keyword, direction, status]);
+  }, [
+    weighTickets,
+    keyword,
+    direction,
+    status,
+    customer,
+    material,
+    contractNo,
+    dateStart,
+    dateEnd,
+  ]);
 
   async function handleDelete(row: WeighTicket) {
     const ok = await confirm(deleteConfirmMessage(`BX${row.bxNo}`));
@@ -75,10 +150,22 @@ export default function WeighTicketsPage() {
         </StatusBadge>
       ),
     },
-    { key: "date", header: t("fields.weighDateTime"), render: (r) => formatWeighDateTime(r.date) },
-    { key: "customer", header: fieldLabels.customer, render: (r) => r.customerName },
+    {
+      key: "date",
+      header: t("fields.weighDateTime"),
+      render: (r) => formatWeighDateTime(r.date),
+    },
+    {
+      key: "customer",
+      header: fieldLabels.customer,
+      render: (r) => r.customerName,
+    },
     { key: "plate", header: fieldLabels.plate, render: (r) => r.plate },
-    { key: "material", header: fieldLabels.material, render: (r) => r.materialSummary },
+    {
+      key: "material",
+      header: fieldLabels.material,
+      render: (r) => r.materialSummary,
+    },
     {
       key: "net",
       header: fieldLabels.net,
@@ -91,7 +178,11 @@ export default function WeighTicketsPage() {
       className: "text-right",
       render: (r) => <span className="tabular-nums">{formatMoney(r.amount)}</span>,
     },
-    { key: "contract", header: fieldLabels.contractNo, render: (r) => r.contractNo },
+    {
+      key: "contract",
+      header: fieldLabels.contractNo,
+      render: (r) => r.contractNo,
+    },
     {
       key: "status",
       header: fieldLabels.status,
@@ -109,7 +200,7 @@ export default function WeighTicketsPage() {
       render: (r) => (
         <RowActions
           onDetail={() => setDetailId(r.id)}
-          onDelete={() => void handleDelete(r)}
+          onDelete={perm.canDelete ? () => void handleDelete(r) : undefined}
         />
       ),
     },
@@ -120,16 +211,33 @@ export default function WeighTicketsPage() {
       <PageHeader
         title={t("weighTickets.title")}
         actions={
-          <PrimaryButton onClick={() => setCreateOpen(true)}>{t("weighTickets.new")}</PrimaryButton>
+          perm.canCreate ? (
+            <PrimaryButton onClick={() => setCreateOpen(true)}>
+              {t("weighTickets.new")}
+            </PrimaryButton>
+          ) : null
         }
       />
       <FilterBar>
         <FilterField label={t("common.keyword")}>
-          <input
-            className={filterControlClass}
+          <TextInput
+            size="sm"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder={t("form.keywordWeigh")}
+          />
+        </FilterField>
+        <FilterField label={t("fields.weighDateRange")} className="min-w-[220px]">
+          <DateRangePicker
+            size="sm"
+            start={dateStart}
+            end={dateEnd}
+            onChange={(start, end) => {
+              setDateStart(start);
+              setDateEnd(end);
+            }}
+            className="min-w-[220px]"
+            aria-label={t("fields.weighDateRange")}
           />
         </FilterField>
         <FilterField label={t("fields.direction")}>
@@ -142,6 +250,30 @@ export default function WeighTicketsPage() {
               { value: "purchase", label: t("common.purchase") },
               { value: "sale", label: t("common.sale") },
             ]}
+          />
+        </FilterField>
+        <FilterField label={t("fields.customer")} className="min-w-[180px]">
+          <Select
+            size="sm"
+            value={customer}
+            onChange={setCustomer}
+            options={customerOptions}
+          />
+        </FilterField>
+        <FilterField label={t("fields.material")} className="min-w-[140px]">
+          <Select
+            size="sm"
+            value={material}
+            onChange={setMaterial}
+            options={materialOptions}
+          />
+        </FilterField>
+        <FilterField label={t("fields.contractNo")}>
+          <TextInput
+            size="sm"
+            value={contractNo}
+            onChange={(e) => setContractNo(e.target.value)}
+            placeholder={t("form.keywordContractNo")}
           />
         </FilterField>
         <FilterField label={t("common.status")}>
@@ -173,6 +305,7 @@ export default function WeighTicketsPage() {
       ) : null}
       {detailId ? (
         <WeighTicketDetailModal
+          readOnly={!perm.canEdit}
           open
           onClose={() => setDetailId(null)}
           id={detailId}

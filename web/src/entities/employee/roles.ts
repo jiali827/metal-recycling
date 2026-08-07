@@ -49,6 +49,10 @@ export function buildEmployeeRoles(
 export function normalizeStoredUser(raw: unknown): User | null {
   if (!raw || typeof raw !== "object") return null;
   const record = raw as Record<string, unknown>;
+  const id = typeof record.id === "string" ? record.id : "";
+  const email = typeof record.email === "string" ? record.email : "";
+  if (!id || !email) return null;
+
   const roleIds = Array.isArray(record.roleIds)
     ? (record.roleIds as RoleId[])
     : record.roleId
@@ -61,6 +65,8 @@ export function normalizeStoredUser(raw: unknown): User | null {
 
   return {
     ...(rest as unknown as User),
+    id,
+    email,
     roleIds,
   };
 }

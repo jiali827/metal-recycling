@@ -13,6 +13,7 @@ import {
 import { createPortal } from "react-dom";
 import { CalendarBlank, CaretLeft, CaretRight } from "@phosphor-icons/react";
 import { useI18n } from "@/shared/i18n";
+import { ControlClearButton } from "./ControlClearButton";
 
 interface DatePickerProps {
   value: string;
@@ -20,6 +21,8 @@ interface DatePickerProps {
   disabled?: boolean;
   size?: "sm" | "md";
   error?: boolean;
+  /** 有值时在右侧显示清空 X，默认开启 */
+  allowClear?: boolean;
   placeholder?: string;
   className?: string;
   id?: string;
@@ -61,6 +64,7 @@ export function DatePicker({
   disabled,
   size = "md",
   error,
+  allowClear = true,
   placeholder,
   className = "",
   id,
@@ -84,7 +88,7 @@ export function DatePicker({
   );
   const [panelStyle, setPanelStyle] = useState<CSSProperties>({});
   const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
 
   const monthTitle =
@@ -198,7 +202,7 @@ export function DatePicker({
     }
   }
 
-  function onKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
+  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     if (disabled) return;
     if (
       !open &&
@@ -274,6 +278,8 @@ export function DatePicker({
         )
       : null;
 
+  const showClear = Boolean(allowClear && value && !disabled);
+
   return (
     <div ref={rootRef} className={`relative ${className}`}>
       {/* Fallback native for mobile / a11y parsers */}
@@ -286,11 +292,12 @@ export function DatePicker({
         className="sr-only"
         disabled={disabled}
       />
-      <button
+      <div
         ref={triggerRef}
-        type="button"
+        role="button"
+        tabIndex={disabled ? -1 : 0}
         id={id}
-        disabled={disabled}
+        aria-disabled={disabled || undefined}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label={ariaLabel ?? t("form.pickDate")}
@@ -303,8 +310,13 @@ export function DatePicker({
         <span className={`ui-control-value${value ? "" : " is-placeholder"}`}>
           {display}
         </span>
-        <CalendarBlank size={16} className="shrink-0 text-muted" />
-      </button>
+        <span className="ui-control-suffix">
+          {showClear ? (
+            <ControlClearButton onClear={() => onChange("")} />
+          ) : null}
+          <CalendarBlank size={16} className="shrink-0 text-muted" aria-hidden />
+        </span>
+      </div>
       {panel}
     </div>
   );

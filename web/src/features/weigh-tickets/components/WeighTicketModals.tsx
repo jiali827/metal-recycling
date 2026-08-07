@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Modal } from "@/shared/ui/Modal";
+import { useConfirm } from "@/shared/ui/ConfirmDialog";
 import {
   DateTimePicker,
   FormField,
@@ -72,6 +73,7 @@ export function WeighTicketCreateModal({
   };
 }) {
   const { t } = useI18n();
+  const confirm = useConfirm();
   const { addWeighTicket, weighTickets, customers, purchaseContracts, saleContracts, materialTypes } =
     useMockStore();
   const moneyUnits = useMoneyUnits();
@@ -179,7 +181,7 @@ export function WeighTicketCreateModal({
   const saleContractOptions = [
     { value: NO_CONTRACT, label: t("form.noContract") },
     ...saleContracts
-      .filter((c) => c.status === "active" || c.status === "fulfilling")
+      .filter((c) => c.status === "active")
       .map((c) => ({
         value: c.id,
         label: `${c.no} · ${c.customerName}`,
@@ -229,7 +231,7 @@ export function WeighTicketCreateModal({
     setSaleContractLineId(NO_CONTRACT);
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (direction === "sale" && saleContractId && !saleContractLineId) return;
     if (direction === "sale" && saleContract && saleLine) {
@@ -238,7 +240,10 @@ export function WeighTicketCreateModal({
         fulfilledQty: saleLine.fulfilledQty + netKg,
       };
       if (saleLineOverTolerance(projected, saleContract.tolerancePercent)) {
-        window.alert(t("contracts.overToleranceHint"));
+        await confirm({
+          alert: true,
+          message: t("contracts.overToleranceHint"),
+        });
       }
     }
     const assignedBxNo = nextWeighTicketBxNo(weighTickets);
@@ -294,19 +299,24 @@ export function WeighTicketCreateModal({
                 tabIndex={-1}
               />
             </FormField>
-            <FormField label={t("fields.plate")}>
-              <input
-                className={inputClass}
-                value={plate}
-                onChange={(e) => setPlate(e.target.value)}
-                placeholder={t("form.platePlaceholder")}
-              />
-            </FormField>
             <FormField label={t("fields.direction")}>
               <OptionField
                 value={direction}
                 onChange={(v) => handleDirectionChange(v as TicketDirection)}
                 options={directionOptions}
+                disabled={contractLocked}
+              />
+            </FormField>
+            <WeighDateTimeField
+              label={t("fields.weighDateTime")}
+              value={date}
+              onChange={setDate}
+            />
+            <FormField label={t("menu.customers")} required>
+              <SearchableSelect
+                value={customerName}
+                onChange={setCustomerName}
+                options={customerOptions}
                 disabled={contractLocked}
               />
             </FormField>
@@ -340,19 +350,6 @@ export function WeighTicketCreateModal({
                 </FormField>
               </>
             )}
-            <FormField label={t("menu.customers")} required>
-              <SearchableSelect
-                value={customerName}
-                onChange={setCustomerName}
-                options={customerOptions}
-                disabled={contractLocked}
-              />
-            </FormField>
-            {contractLocked ? (
-              <FormFieldFull>
-                <p className="text-xs text-muted">{t("form.contractLinkedHint")}</p>
-              </FormFieldFull>
-            ) : null}
             <FormField label={t("menu.materialTypes")} required>
               <Select
                 value={materialSummary}
@@ -361,9 +358,22 @@ export function WeighTicketCreateModal({
                 disabled={contractLocked}
               />
             </FormField>
+            <FormField label={t("fields.plate")}>
+              <input
+                className={inputClass}
+                value={plate}
+                onChange={(e) => setPlate(e.target.value)}
+                placeholder={t("form.platePlaceholder")}
+              />
+            </FormField>
+            {contractLocked ? (
+              <FormFieldFull>
+                <p className="text-xs text-muted">{t("form.contractLinkedHint")}</p>
+              </FormFieldFull>
+            ) : null}
           </FormFieldGrid>
         </FormSection>
-        <FormSection title={t("form.sectionWeigh")}>
+        <FormSection title={t("form.sectionWeigh")} variant="panel">
           <FormFieldGrid>
             <FormField label={t("fields.gross")} required>
               <InputWithUnit
@@ -405,11 +415,6 @@ export function WeighTicketCreateModal({
             <FormField label={t("fields.amount")}>
               <div className="ui-form-readonly tabular-nums">{formatMoney(amount)}</div>
             </FormField>
-            <WeighDateTimeField
-              label={t("fields.weighDateTime")}
-              value={date}
-              onChange={setDate}
-            />
           </FormFieldGrid>
         </FormSection>
         <FormSection title={t("form.sectionOptional")}>
@@ -431,12 +436,15 @@ export function WeighTicketDetailModal({
   open,
   onClose,
   id,
+  readOnly = false
 }: {
   open: boolean;
   onClose: () => void;
   id: string | null;
+  readOnly?: boolean;
 }) {
   const { t } = useI18n();
+  const confirm = useConfirm();
   const { weighTickets, updateWeighTicket, customers, purchaseContracts, saleContracts, materialTypes } =
     useMockStore();
   const moneyUnits = useMoneyUnits();
@@ -551,7 +559,6 @@ export function WeighTicketDetailModal({
       .filter(
         (c) =>
           c.status === "active" ||
-          c.status === "fulfilling" ||
           c.id === saleContractId,
       )
       .map((c) => ({
@@ -598,8 +605,9 @@ export function WeighTicketDetailModal({
     if (line) applyContractFields(contractFieldsForSaleLine(saleContract, line));
   }
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (readOnly) return;
     if (!row) return;
     if (direction === "sale" && saleContractId && !saleContractLineId) return;
     const saleLine = saleContract?.lines.find((l) => l.id === saleContractLineId);
@@ -617,7 +625,10 @@ export function WeighTicketDetailModal({
         fulfilledQty: otherKg + (status === "normal" ? netKg : 0),
       };
       if (saleLineOverTolerance(projected, saleContract.tolerancePercent)) {
-        window.alert(t("contracts.overToleranceHint"));
+        await confirm({
+          alert: true,
+          message: t("contracts.overToleranceHint"),
+        });
       }
     }
     updateWeighTicket(row.id, {
@@ -653,9 +664,11 @@ export function WeighTicketDetailModal({
             <button type="button" className="ui-btn-secondary" onClick={onClose}>
               {t("common.close")}
             </button>
+            {!readOnly ? (
             <button type="submit" form="weigh-edit-form" className="ui-btn-primary">
               {t("common.save")}
             </button>
+          ) : null}
           </>
         ) : (
           <button type="button" className="ui-btn-secondary" onClick={onClose}>
@@ -679,14 +692,6 @@ export function WeighTicketDetailModal({
                   tabIndex={-1}
                 />
               </FormField>
-              <FormField label={t("fields.plate")}>
-                <input
-                  className={inputClass}
-                  value={plate}
-                  onChange={(e) => setPlate(e.target.value)}
-                  placeholder={t("form.platePlaceholder")}
-                />
-              </FormField>
               <FormField label={t("fields.direction")}>
                 <OptionField
                   value={direction}
@@ -697,6 +702,19 @@ export function WeighTicketDetailModal({
                     setSaleContractLineId(NO_CONTRACT);
                   }}
                   options={directionOptions}
+                  disabled={contractLocked}
+                />
+              </FormField>
+              <WeighDateTimeField
+                label={t("fields.weighDateTime")}
+                value={date}
+                onChange={setDate}
+              />
+              <FormField label={t("menu.customers")} required>
+                <SearchableSelect
+                  value={customerName}
+                  onChange={setCustomerName}
+                  options={customerOptions}
                   disabled={contractLocked}
                 />
               </FormField>
@@ -730,25 +748,20 @@ export function WeighTicketDetailModal({
                   </FormField>
                 </>
               )}
-              <FormField label={t("menu.customers")} required>
-                <SearchableSelect
-                  value={customerName}
-                  onChange={setCustomerName}
-                  options={customerOptions}
-                  disabled={contractLocked}
-                />
-              </FormField>
-              {contractLocked ? (
-                <FormFieldFull>
-                  <p className="text-xs text-muted">{t("form.contractLinkedHint")}</p>
-                </FormFieldFull>
-              ) : null}
               <FormField label={t("menu.materialTypes")} required>
                 <Select
                   value={materialSummary}
                   onChange={setMaterialSummary}
                   options={materialOptions}
                   disabled={contractLocked}
+                />
+              </FormField>
+              <FormField label={t("fields.plate")}>
+                <input
+                  className={inputClass}
+                  value={plate}
+                  onChange={(e) => setPlate(e.target.value)}
+                  placeholder={t("form.platePlaceholder")}
                 />
               </FormField>
               <FormField label={t("common.status")}>
@@ -758,9 +771,14 @@ export function WeighTicketDetailModal({
                   options={ticketStatusOptions}
                 />
               </FormField>
+              {contractLocked ? (
+                <FormFieldFull>
+                  <p className="text-xs text-muted">{t("form.contractLinkedHint")}</p>
+                </FormFieldFull>
+              ) : null}
             </FormFieldGrid>
           </FormSection>
-          <FormSection title={t("form.sectionWeigh")}>
+          <FormSection title={t("form.sectionWeigh")} variant="panel">
             <FormFieldGrid>
               <FormField label={t("fields.gross")} required>
                 <InputWithUnit
@@ -802,11 +820,6 @@ export function WeighTicketDetailModal({
               <FormField label={t("fields.amount")}>
                 <div className="ui-form-readonly tabular-nums">{formatMoney(amount)}</div>
               </FormField>
-              <WeighDateTimeField
-                label={t("fields.weighDateTime")}
-                value={date}
-                onChange={setDate}
-              />
             </FormFieldGrid>
           </FormSection>
           <FormSection title={t("form.sectionOptional")}>

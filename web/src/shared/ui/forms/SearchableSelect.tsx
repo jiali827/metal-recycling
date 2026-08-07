@@ -12,19 +12,25 @@ import {
   type KeyboardEvent,
 } from "react";
 import { createPortal } from "react-dom";
-import { CaretDown, Check, MagnifyingGlass } from "@phosphor-icons/react";
+import { CaretDown, Check } from "@phosphor-icons/react";
 import { useI18n } from "@/shared/i18n";
 import type { SelectOption } from "./Select";
+import { ControlClearButton } from "./ControlClearButton";
 
 interface SearchableSelectProps {
   value: string;
   onChange: (value: string) => void;
   options: SelectOption[];
   placeholder?: string;
+  /** @deprecated 搜索文案已合并到主输入框 placeholder */
   searchPlaceholder?: string;
   disabled?: boolean;
   size?: "sm" | "md";
   error?: boolean;
+  /** 有值时在右侧显示清空 X，默认开启 */
+  allowClear?: boolean;
+  /** 清空后的值；未传时优先取 options 中的 "" 或 "all" */
+  clearValue?: string;
   className?: string;
   "aria-label"?: string;
   id?: string;
@@ -48,24 +54,33 @@ export function SearchableSelect({
   disabled,
   size = "md",
   error,
+  allowClear = true,
+  clearValue: clearValueProp,
   className = "",
   "aria-label": ariaLabel,
   id,
 }: SearchableSelectProps) {
   const { t } = useI18n();
-  const resolvedPlaceholder = placeholder ?? t("form.selectPlaceholder");
-  const resolvedSearchPlaceholder = searchPlaceholder ?? t("form.searchPlaceholder");
+  const resolvedPlaceholder =
+    placeholder ?? searchPlaceholder ?? t("form.selectPlaceholder");
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [highlight, setHighlight] = useState(-1);
   const [panelStyle, setPanelStyle] = useState<CSSProperties>({});
   const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const listboxId = useId();
 
   const selected = options.find((o) => o.value === value);
+  const clearValue =
+    clearValueProp ??
+    options.find((o) => o.value === "")?.value ??
+    options.find((o) => o.value === "all")?.value ??
+    "";
+  const showClear = Boolean(
+    allowClear && !disabled && value !== clearValue && value !== undefined,
+  );
 
   const filteredOptions = useMemo(
     () => options.filter((opt) => matchOption(query, opt)),
@@ -74,12 +89,14 @@ export function SearchableSelect({
 
   const enabledOptions = filteredOptions.filter((o) => !o.disabled);
 
+  const inputDisplay = open ? query : (selected?.label ?? "");
+
   const updatePosition = useCallback(() => {
-    const el = triggerRef.current;
+    const el = rootRef.current;
     if (!el) return;
     const rect = el.getBoundingClientRect();
     const spaceBelow = window.innerHeight - rect.bottom;
-    const openUp = spaceBelow < 280 && rect.top > spaceBelow;
+    const openUp = spaceBelow < 240 && rect.top > spaceBelow;
     setPanelStyle({
       position: "fixed",
       left: rect.left,
@@ -87,7 +104,7 @@ export function SearchableSelect({
       ...(openUp
         ? { bottom: window.innerHeight - rect.top + 4 }
         : { top: rect.bottom + 4 }),
-      maxHeight: 280,
+      maxHeight: 240,
       display: "flex",
       flexDirection: "column",
       overflow: "hidden",
@@ -127,7 +144,6 @@ export function SearchableSelect({
     }
     const enabledIdx = enabledOptions.findIndex((o) => o.value === value);
     setHighlight(enabledIdx >= 0 ? enabledIdx : 0);
-    requestAnimationFrame(() => searchRef.current?.focus());
     // eslint-disable-next-line react-hooks/exhaustive-deps -- sync highlight when panel opens
   }, [open, value]);
 
@@ -140,10 +156,40 @@ export function SearchableSelect({
     if (!opt) return;
     onChange(opt.value);
     setOpen(false);
-    triggerRef.current?.focus();
+    inputRef.current?.focus();
   }
 
-  function onTriggerKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
+  function openPanel() {
+    if (disabled) return;
+    // 空值占位（如 "—"）不得写入搜索词，否则会把真实选项全部过滤掉
+    const emptySelected =
+      !selected ||
+      selected.value === "" ||
+      selected.value === clearValue ||
+      selected.value === "all";
+    setQuery(emptySelected ? "" : selected.label);
+    setOpen(true);
+    requestAnimationFrame(() => {
+      if (!inputRef.current) return;
+      if (emptySelected) {
+        inputRef.current.focus();
+      } else {
+        inputRef.current.select();
+      }
+    });
+  }
+
+  function onInputFocus() {
+    if (disabled) return;
+    if (!open) openPanel();
+  }
+
+  function onInputChange(next: string) {
+    setQuery(next);
+    if (!open) setOpen(true);
+  }
+
+  function onInputKeyDown(e: KeyboardEvent<HTMLInputElement>) {
     if (disabled) return;
     if (!open) {
       if (
@@ -153,21 +199,13 @@ export function SearchableSelect({
         e.key === " "
       ) {
         e.preventDefault();
-        setOpen(true);
+        openPanel();
       }
       return;
     }
     if (e.key === "Escape") {
       e.preventDefault();
       setOpen(false);
-    }
-  }
-
-  function onSearchKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      setOpen(false);
-      triggerRef.current?.focus();
       return;
     }
     if (e.key === "ArrowDown") {
@@ -190,24 +228,6 @@ export function SearchableSelect({
     open && typeof document !== "undefined"
       ? createPortal(
           <div ref={listRef} id={listboxId} role="listbox" className="ui-panel" style={panelStyle}>
-            <div className="sticky top-0 z-10 border-b border-border bg-card p-2">
-              <div className="relative">
-                <MagnifyingGlass
-                  size={14}
-                  className="pointer-events-none absolute top-1/2 left-2.5 -translate-y-1/2 text-muted"
-                />
-                <input
-                  ref={searchRef}
-                  type="search"
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  onKeyDown={onSearchKeyDown}
-                  placeholder={resolvedSearchPlaceholder}
-                  className="ui-input h-9 w-full pl-8 text-sm"
-                  aria-label={resolvedSearchPlaceholder}
-                />
-              </div>
-            </div>
             <div className="ui-panel-scroll min-h-0 flex-1">
               {filteredOptions.length === 0 ? (
                 <div className="px-3 py-2 text-sm text-muted">{t("form.noSearchResults")}</div>
@@ -227,11 +247,12 @@ export function SearchableSelect({
                       onMouseEnter={() => {
                         if (!opt.disabled) setHighlight(enabledIdx);
                       }}
+                      onMouseDown={(e) => e.preventDefault()}
                       onClick={() => {
                         if (opt.disabled) return;
                         onChange(opt.value);
                         setOpen(false);
-                        triggerRef.current?.focus();
+                        inputRef.current?.focus();
                       }}
                     >
                       <span className="min-w-0 flex-1 truncate">{opt.label}</span>
@@ -252,26 +273,55 @@ export function SearchableSelect({
 
   return (
     <div ref={rootRef} className={`relative ${className}`}>
-      <button
-        ref={triggerRef}
-        type="button"
-        id={id}
-        disabled={disabled}
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={open ? listboxId : undefined}
-        aria-label={ariaLabel}
-        className={`ui-control-trigger${size === "sm" ? " is-sm" : ""}${open ? " is-open" : ""}${error ? " is-error" : ""}`}
-        onClick={() => {
-          if (!disabled) setOpen((v) => !v);
-        }}
-        onKeyDown={onTriggerKeyDown}
+      <div
+        className={`ui-control-trigger ui-control-combobox${size === "sm" ? " is-sm" : ""}${open ? " is-open" : ""}${error ? " is-error" : ""}${disabled ? " is-disabled" : ""}`}
       >
-        <span className={`ui-control-value${selected ? "" : " is-placeholder"}`}>
-          {selected?.label ?? resolvedPlaceholder}
-        </span>
-        <CaretDown size={14} className="ui-control-chevron" />
-      </button>
+        <input
+          ref={inputRef}
+          id={id}
+          type="text"
+          role="combobox"
+          disabled={disabled}
+          value={inputDisplay}
+          placeholder={resolvedPlaceholder}
+          aria-label={ariaLabel}
+          aria-expanded={open}
+          aria-controls={open ? listboxId : undefined}
+          aria-autocomplete="list"
+          className="ui-control-combobox-input"
+          onFocus={onInputFocus}
+          onChange={(e) => onInputChange(e.target.value)}
+          onKeyDown={onInputKeyDown}
+        />
+        {showClear ? (
+          <ControlClearButton
+            onClear={() => {
+              onChange(clearValue);
+              setQuery("");
+              inputRef.current?.focus();
+            }}
+          />
+        ) : null}
+        <button
+          type="button"
+          tabIndex={-1}
+          disabled={disabled}
+          className="ui-control-combobox-toggle"
+          aria-hidden
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => {
+            if (disabled) return;
+            if (open) {
+              setOpen(false);
+              inputRef.current?.focus();
+            } else {
+              openPanel();
+            }
+          }}
+        >
+          <CaretDown size={14} className="ui-control-chevron" />
+        </button>
+      </div>
       {panel}
     </div>
   );

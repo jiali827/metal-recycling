@@ -23,6 +23,7 @@ import {
   tenant as seedTenant,
   users as seedUsers,
   weighTickets as seedTickets,
+  weighSettlementDocs as seedWeighSettlementDocs,
 } from "@/data/mock/seed";
 import type {
   ArApItem,
@@ -36,16 +37,20 @@ import type {
   SaleContract,
   Tenant,
   User,
+  WeighSettlementDoc,
   WeighTicket,
 } from "@/entities/types";
 import { recomputeSaleContractFulfillment } from "@/entities/contract/summaries";
+import { normalizePurchaseStatus, normalizeSaleStatus } from "@/entities/contract/status";
 import { stampOnCreate, stampOnUpdate } from "@/shared/lib/timestamps";
 import { setActiveCurrency } from "@/shared/lib/currency";
 import { accessToPermissionSummary, createDefaultAccess, normalizeAccess } from "@/shared/config/permissions";
 import {
-  paymentTicketBxNo,
+  hasSettlementPayments,
+  paymentSettlementDocId,
   syncArApFromPayments,
 } from "@/entities/settlement";
+import { nowLocalDateTime } from "@/shared/lib/date";
 
 type CreateInput<T extends { id: string; createdAt: string; updatedAt: string }> = Omit<
   T,
@@ -56,88 +61,26 @@ function uid(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
-function arApPayloadFromTicket(ticket: WeighTicket): CreateInput<ArApItem> {
-  const amount = ticket.amount;
+const SETTLEMENT_ATTACHMENT_KEYS = new Set(["attachmentName", "attachmentDataUrl"]);
+
+function arApPayloadFromSettlement(doc: WeighSettlementDoc): CreateInput<ArApItem> {
   return {
-    ticketBxNo: ticket.bxNo,
-    customerName: ticket.customerName,
-    amount,
+    settlementDocId: doc.id,
+    settlementDocNo: doc.no,
+    customerName: doc.customerName,
+    contractId: doc.contractId,
+    contractNo: doc.contractNo,
+    amount: doc.totalAmount,
     settledAmount: 0,
-    balance: amount,
+    balance: doc.totalAmount,
     status: "open",
-    date: ticket.date.slice(0, 10) || ticket.date,
+    date: doc.docDate,
   };
 }
 
-function syncOpenArApFromTicket(
-  list: ArApItem[],
-  ticket: WeighTicket,
-  matchBxNo: string,
-): ArApItem[] {
-  return list.map((item) => {
-    if (item.ticketBxNo !== matchBxNo) return item;
-    if (item.status === "void") return item;
-    if (item.settledAmount > 0) {
-      return stampOnUpdate(item, {
-        ticketBxNo: ticket.bxNo,
-        customerName: ticket.customerName,
-        date: ticket.date.slice(0, 10) || ticket.date,
-      });
-    }
-    const amount = ticket.amount;
-    return stampOnUpdate(item, {
-      ticketBxNo: ticket.bxNo,
-      customerName: ticket.customerName,
-      amount,
-      settledAmount: 0,
-      balance: amount,
-      status: "open",
-      date: ticket.date.slice(0, 10) || ticket.date,
-    });
-  });
-}
-
-function voidArApForTicket(list: ArApItem[], bxNo: string): ArApItem[] {
-  return list.map((item) => {
-    if (item.ticketBxNo !== bxNo) return item;
-    if (item.status === "void") return item;
-    return stampOnUpdate(item, {
-      status: "void",
-      balance: item.settledAmount > 0 ? item.balance : 0,
-    });
-  });
-}
-
-function removeUnsettledArAp(list: ArApItem[], bxNo: string): ArApItem[] {
-  return list.filter((item) => !(item.ticketBxNo === bxNo && item.settledAmount === 0));
-}
-
-function reopenOrEnsureArAp(
-  list: ArApItem[],
-  ticket: WeighTicket,
-  prefix: "ar" | "ap",
-): ArApItem[] {
-  const existing = list.find((item) => item.ticketBxNo === ticket.bxNo);
-  if (existing) {
-    if (existing.status === "void" && existing.settledAmount === 0) {
-      const amount = ticket.amount;
-      return list.map((item) =>
-        item.id === existing.id
-          ? stampOnUpdate(item, {
-              customerName: ticket.customerName,
-              amount,
-              settledAmount: 0,
-              balance: amount,
-              status: "open",
-              date: ticket.date.slice(0, 10) || ticket.date,
-            })
-          : item,
-      );
-    }
-    return syncOpenArApFromTicket(list, ticket, ticket.bxNo);
-  }
-  return [stampOnCreate({ ...arApPayloadFromTicket(ticket), id: uid(prefix) }), ...list];
-}
+export type UnconfirmSettlementResult =
+  | { ok: true }
+  | { ok: false; reason: "not_found" | "not_confirmed" | "has_payments" };
 
 interface MockStoreValue {
   tenant: Tenant;
@@ -154,6 +97,15 @@ interface MockStoreValue {
   addWeighTicket: (input: CreateInput<WeighTicket>) => WeighTicket;
   updateWeighTicket: (id: string, patch: Partial<WeighTicket>) => void;
   removeWeighTicket: (id: string) => void;
+  weighSettlementDocs: WeighSettlementDoc[];
+  addWeighSettlementDoc: (input: CreateInput<WeighSettlementDoc>) => WeighSettlementDoc;
+  updateWeighSettlementDoc: (id: string, patch: Partial<WeighSettlementDoc>) => void;
+  removeWeighSettlementDoc: (id: string) => boolean;
+  confirmWeighSettlementDoc: (
+    id: string,
+    opts?: { confirmedBy?: string },
+  ) => boolean;
+  unconfirmWeighSettlementDoc: (id: string) => UnconfirmSettlementResult;
   receivables: ArApItem[];
   addReceivable: (input: CreateInput<ArApItem>) => ArApItem;
   updateReceivable: (id: string, patch: Partial<ArApItem>) => void;
@@ -226,6 +178,10 @@ function readStoredTenant(): typeof seedTenant {
       ...seedTenant,
       ...parsed,
       logoUrl: parsed.logoUrl ?? undefined,
+      abbr:
+        typeof parsed.abbr === "string" && parsed.abbr.trim()
+          ? parsed.abbr.trim().toUpperCase()
+          : seedTenant.abbr,
       address: typeof parsed.address === "string" ? parsed.address : seedTenant.address,
       addressEn:
         typeof parsed.addressEn === "string" ? parsed.addressEn : seedTenant.addressEn,
@@ -248,6 +204,7 @@ function persistTenant(next: typeof seedTenant) {
       JSON.stringify({
         name: next.name,
         nameEn: next.nameEn,
+        abbr: next.abbr,
         currency: next.currency,
         openingCash: next.openingCash,
         logoUrl: next.logoUrl ?? null,
@@ -265,11 +222,17 @@ function persistTenant(next: typeof seedTenant) {
 
 export function MockStoreProvider({ children }: { children: ReactNode }) {
   const [tenant, setTenant] = useState(seedTenant);
-  const [purchaseContracts, setPurchaseContracts] = useState(seedPurchaseContracts);
+  const [purchaseContracts, setPurchaseContracts] = useState(() =>
+    seedPurchaseContracts.map((c) => ({
+      ...c,
+      status: normalizePurchaseStatus(c.status),
+    })),
+  );
   const [saleContracts, setSaleContracts] = useState(() =>
     seedSaleContracts.map((c) => recomputeSaleContractFulfillment(c, seedTickets)),
   );
   const [weighTickets, setWeighTickets] = useState(seedTickets);
+  const [weighSettlementDocs, setWeighSettlementDocs] = useState(seedWeighSettlementDocs);
   const [receivables, setReceivables] = useState(seedReceivables);
   const [payables, setPayables] = useState(seedPayables);
   const [payments, setPayments] = useState(seedPayments);
@@ -306,13 +269,26 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addPurchaseContract = useCallback((input: CreateInput<PurchaseContract>) => {
-    const row = stampOnCreate({ ...input, id: uid("pc") });
+    const row = stampOnCreate({
+      ...input,
+      status: normalizePurchaseStatus(input.status),
+      id: uid("pc"),
+    });
     setPurchaseContracts((list) => [row, ...list]);
     return row;
   }, []);
   const updatePurchaseContract = useCallback((id: string, patch: Partial<PurchaseContract>) => {
     setPurchaseContracts((list) =>
-      list.map((r) => (r.id === id ? stampOnUpdate(r, patch) : r)),
+      list.map((r) =>
+        r.id === id
+          ? stampOnUpdate(r, {
+              ...patch,
+              ...(patch.status != null
+                ? { status: normalizePurchaseStatus(patch.status) }
+                : {}),
+            })
+          : r,
+      ),
     );
   }, []);
   const removePurchaseContract = useCallback((id: string) => {
@@ -320,13 +296,24 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addSaleContract = useCallback((input: CreateInput<SaleContract>) => {
-    const row = stampOnCreate({ ...input, id: uid("sc") });
+    const row = stampOnCreate({
+      ...input,
+      status: normalizeSaleStatus(input.status),
+      id: uid("sc"),
+    });
     setSaleContracts((list) => [row, ...list]);
     return row;
   }, []);
   const updateSaleContract = useCallback((id: string, patch: Partial<SaleContract>) => {
     setSaleContracts((list) =>
-      list.map((r) => (r.id === id ? stampOnUpdate(r, patch) : r)),
+      list.map((r) =>
+        r.id === id
+          ? stampOnUpdate(r, {
+              ...patch,
+              ...(patch.status != null ? { status: normalizeSaleStatus(patch.status) } : {}),
+            })
+          : r,
+      ),
     );
   }, []);
   const removeSaleContract = useCallback(
@@ -346,26 +333,6 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
         syncSaleFulfillment(next);
         return next;
       });
-
-      if (row.status === "normal") {
-        const payload = arApPayloadFromTicket(row);
-        if (row.direction === "sale") {
-          setReceivables((list) => {
-            if (list.some((item) => item.ticketBxNo === row.bxNo && item.status !== "void")) {
-              return list;
-            }
-            return [stampOnCreate({ ...payload, id: uid("ar") }), ...list];
-          });
-        } else {
-          setPayables((list) => {
-            if (list.some((item) => item.ticketBxNo === row.bxNo && item.status !== "void")) {
-              return list;
-            }
-            return [stampOnCreate({ ...payload, id: uid("ap") }), ...list];
-          });
-        }
-      }
-
       return row;
     },
     [syncSaleFulfillment],
@@ -379,59 +346,6 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
         const next = stampOnUpdate(prev, patch);
         const nextList = list.map((r) => (r.id === id ? next : r));
         syncSaleFulfillment(nextList);
-
-        const prevBx = prev.bxNo;
-        const becameVoid = prev.status !== "void" && next.status === "void";
-        const becameNormal = prev.status === "void" && next.status === "normal";
-
-        if (becameVoid) {
-          if (next.direction === "sale") {
-            setReceivables((ar) => voidArApForTicket(ar, next.bxNo));
-          } else {
-            setPayables((ap) => voidArApForTicket(ap, next.bxNo));
-          }
-        } else if (next.status === "normal") {
-          if (next.direction === "sale") {
-            setReceivables((ar) => {
-              let pool = ar;
-              if (prevBx !== next.bxNo) {
-                pool = pool.map((item) =>
-                  item.ticketBxNo === prevBx
-                    ? stampOnUpdate(item, { ticketBxNo: next.bxNo })
-                    : item,
-                );
-              }
-              if (becameNormal || prev.direction === "purchase") {
-                return reopenOrEnsureArAp(pool, next, "ar");
-              }
-              return syncOpenArApFromTicket(pool, next, next.bxNo);
-            });
-            if (prev.direction === "purchase") {
-              setPayables((ap) => removeUnsettledArAp(voidArApForTicket(ap, prevBx), prevBx));
-            }
-          } else {
-            setPayables((ap) => {
-              let pool = ap;
-              if (prevBx !== next.bxNo) {
-                pool = pool.map((item) =>
-                  item.ticketBxNo === prevBx
-                    ? stampOnUpdate(item, { ticketBxNo: next.bxNo })
-                    : item,
-                );
-              }
-              if (becameNormal || prev.direction === "sale") {
-                return reopenOrEnsureArAp(pool, next, "ap");
-              }
-              return syncOpenArApFromTicket(pool, next, next.bxNo);
-            });
-            if (prev.direction === "sale") {
-              setReceivables((ar) =>
-                removeUnsettledArAp(voidArApForTicket(ar, prevBx), prevBx),
-              );
-            }
-          }
-        }
-
         return nextList;
       });
     },
@@ -441,14 +355,6 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
   const removeWeighTicket = useCallback(
     (id: string) => {
       setWeighTickets((list) => {
-        const row = list.find((r) => r.id === id);
-        if (!row) return list;
-        const bxNo = row.bxNo;
-        if (row.direction === "sale") {
-          setReceivables((ar) => removeUnsettledArAp(voidArApForTicket(ar, bxNo), bxNo));
-        } else {
-          setPayables((ap) => removeUnsettledArAp(voidArApForTicket(ap, bxNo), bxNo));
-        }
         const next = list.filter((r) => r.id !== id);
         syncSaleFulfillment(next);
         return next;
@@ -456,6 +362,120 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     },
     [syncSaleFulfillment],
   );
+
+  const addWeighSettlementDoc = useCallback((input: CreateInput<WeighSettlementDoc>) => {
+    const row = stampOnCreate({
+      ...input,
+      status: input.status ?? "pending",
+      id: uid("ws"),
+    });
+    setWeighSettlementDocs((list) => [row, ...list]);
+    return row;
+  }, []);
+
+  const updateWeighSettlementDoc = useCallback((id: string, patch: Partial<WeighSettlementDoc>) => {
+    setWeighSettlementDocs((list) =>
+      list.map((r) => {
+        if (r.id !== id) return r;
+        if (r.status === "confirmed") {
+          const safe: Partial<WeighSettlementDoc> = {};
+          for (const key of Object.keys(patch) as (keyof WeighSettlementDoc)[]) {
+            if (SETTLEMENT_ATTACHMENT_KEYS.has(key)) {
+              (safe as Record<string, unknown>)[key] = patch[key];
+            }
+          }
+          if (Object.keys(safe).length === 0) return r;
+          return stampOnUpdate(r, safe);
+        }
+        return stampOnUpdate(r, patch);
+      }),
+    );
+  }, []);
+
+  const removeWeighSettlementDoc = useCallback((id: string) => {
+    let removed = false;
+    setWeighSettlementDocs((list) => {
+      const row = list.find((r) => r.id === id);
+      if (!row || row.status === "confirmed") return list;
+      removed = true;
+      return list.filter((r) => r.id !== id);
+    });
+    return removed;
+  }, []);
+
+  const confirmWeighSettlementDoc = useCallback(
+    (id: string, opts?: { confirmedBy?: string }) => {
+      let ok = false;
+      setWeighSettlementDocs((list) => {
+        const row = list.find((r) => r.id === id);
+        if (!row || row.status === "confirmed") return list;
+        ok = true;
+        const confirmed = stampOnUpdate(row, {
+          status: "confirmed" as const,
+          confirmedAt: nowLocalDateTime(),
+          confirmedBy: opts?.confirmedBy?.trim() || undefined,
+        });
+        const payload = arApPayloadFromSettlement(confirmed);
+        if (confirmed.kind === "sale") {
+          setReceivables((ar) => {
+            if (ar.some((item) => item.settlementDocId === confirmed.id && item.status !== "void")) {
+              return ar;
+            }
+            return [stampOnCreate({ ...payload, id: uid("ar") }), ...ar];
+          });
+        } else {
+          setPayables((ap) => {
+            if (ap.some((item) => item.settlementDocId === confirmed.id && item.status !== "void")) {
+              return ap;
+            }
+            return [stampOnCreate({ ...payload, id: uid("ap") }), ...ap];
+          });
+        }
+        return list.map((r) => (r.id === id ? confirmed : r));
+      });
+      return ok;
+    },
+    [],
+  );
+
+  const unconfirmWeighSettlementDoc = useCallback((id: string): UnconfirmSettlementResult => {
+    const doc = weighSettlementDocs.find((r) => r.id === id);
+    if (!doc) return { ok: false, reason: "not_found" };
+    if (doc.status !== "confirmed") return { ok: false, reason: "not_confirmed" };
+    if (hasSettlementPayments(payments, id)) {
+      return { ok: false, reason: "has_payments" };
+    }
+
+    setWeighSettlementDocs((list) =>
+      list.map((r) =>
+        r.id === id
+          ? (() => {
+              const next = stampOnUpdate(r, { status: "pending" as const });
+              delete next.confirmedAt;
+              delete next.confirmedBy;
+              return next;
+            })()
+          : r,
+      ),
+    );
+    if (doc.kind === "sale") {
+      setReceivables((ar) =>
+        ar.filter(
+          (item) =>
+            !(item.settlementDocId === id && item.settledAmount === 0),
+        ),
+      );
+    } else {
+      setPayables((ap) =>
+        ap.filter(
+          (item) =>
+            !(item.settlementDocId === id && item.settledAmount === 0),
+        ),
+      );
+    }
+    return { ok: true };
+  }, [weighSettlementDocs, payments]);
+
   const addReceivable = useCallback((input: CreateInput<ArApItem>) => {
     const row = stampOnCreate({ ...input, id: uid("ar") });
     setReceivables((list) => [row, ...list]);
@@ -484,12 +504,12 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     const row = stampOnCreate({ ...input, id: uid("p") });
     setPayments((list) => {
       const next = [row, ...list];
-      const bx = paymentTicketBxNo(row);
-      if (row.category === "settlement" && bx) {
+      const docId = paymentSettlementDocId(row);
+      if (row.category === "settlement" && docId) {
         if (row.type === "receipt") {
-          setReceivables((ar) => syncArApFromPayments(ar, next, [bx], "receipt"));
+          setReceivables((ar) => syncArApFromPayments(ar, next, [docId], "receipt"));
         } else {
-          setPayables((ap) => syncArApFromPayments(ap, next, [bx], "payment"));
+          setPayables((ap) => syncArApFromPayments(ap, next, [docId], "payment"));
         }
       }
       return next;
@@ -503,17 +523,20 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       if (!prev) return list;
       const nextRow = stampOnUpdate(prev, patch);
       const next = list.map((r) => (r.id === id ? nextRow : r));
-      const bxNos = [paymentTicketBxNo(prev), paymentTicketBxNo(nextRow)].filter(Boolean);
+      const docIds = [
+        paymentSettlementDocId(prev),
+        paymentSettlementDocId(nextRow),
+      ].filter(Boolean);
       const types = new Set([prev.type, nextRow.type]);
       if (
         (prev.category === "settlement" || nextRow.category === "settlement") &&
-        bxNos.length > 0
+        docIds.length > 0
       ) {
         if (types.has("receipt")) {
-          setReceivables((ar) => syncArApFromPayments(ar, next, bxNos, "receipt"));
+          setReceivables((ar) => syncArApFromPayments(ar, next, docIds, "receipt"));
         }
         if (types.has("payment")) {
-          setPayables((ap) => syncArApFromPayments(ap, next, bxNos, "payment"));
+          setPayables((ap) => syncArApFromPayments(ap, next, docIds, "payment"));
         }
       }
       return next;
@@ -525,12 +548,12 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       const prev = list.find((r) => r.id === id);
       if (!prev) return list;
       const next = list.filter((r) => r.id !== id);
-      const bx = paymentTicketBxNo(prev);
-      if (prev.category === "settlement" && bx) {
+      const docId = paymentSettlementDocId(prev);
+      if (prev.category === "settlement" && docId) {
         if (prev.type === "receipt") {
-          setReceivables((ar) => syncArApFromPayments(ar, next, [bx], "receipt"));
+          setReceivables((ar) => syncArApFromPayments(ar, next, [docId], "receipt"));
         } else {
-          setPayables((ap) => syncArApFromPayments(ap, next, [bx], "payment"));
+          setPayables((ap) => syncArApFromPayments(ap, next, [docId], "payment"));
         }
       }
       return next;
@@ -677,6 +700,12 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       addWeighTicket,
       updateWeighTicket,
       removeWeighTicket,
+      weighSettlementDocs,
+      addWeighSettlementDoc,
+      updateWeighSettlementDoc,
+      removeWeighSettlementDoc,
+      confirmWeighSettlementDoc,
+      unconfirmWeighSettlementDoc,
       receivables,
       addReceivable,
       updateReceivable,
@@ -730,6 +759,12 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       addWeighTicket,
       updateWeighTicket,
       removeWeighTicket,
+      weighSettlementDocs,
+      addWeighSettlementDoc,
+      updateWeighSettlementDoc,
+      removeWeighSettlementDoc,
+      confirmWeighSettlementDoc,
+      unconfirmWeighSettlementDoc,
       receivables,
       addReceivable,
       updateReceivable,

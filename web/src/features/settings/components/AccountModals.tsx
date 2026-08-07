@@ -74,10 +74,7 @@ export function ProfileEditModal({
         className="space-y-4"
         onSubmit={handleSubmit}
       >
-        <FormField
-          label={t("settings.avatarLabel")}
-          hint={t("settings.avatarHint")}
-        >
+        <FormField label={t("settings.avatarLabel")}>
           <AvatarUploadField
             name={name || user?.name || ""}
             value={avatarUrl}

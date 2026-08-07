@@ -170,9 +170,9 @@
 
 | Class | 规格 |
 |-------|------|
-| `.ui-btn-primary` | 高 36px，圆角 8，品牌底白字；hover 加深；active `scale(0.98)` |
-| `.ui-btn-secondary` | 白底边框，muted 字；hover chip 底 |
-| `.ui-btn-danger` | 危险红底白字；确认删除等 |
+| `.ui-btn-primary` | 高 36px（`--control-height-sm`），圆角 8，品牌底白字；与 secondary/danger **同高同边框盒**；hover 加深；active `scale(0.98)` |
+| `.ui-btn-secondary` | 同高 36px，白底边框，muted 字；hover chip 底 |
+| `.ui-btn-danger` | 同高 36px，危险红底白字；确认删除等 |
 
 统一字号 `0.875rem`、字重 medium（主/危险）。
 

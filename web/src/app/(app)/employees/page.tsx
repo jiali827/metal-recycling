@@ -8,9 +8,12 @@ import { StatusBadge } from "@/shared/ui/StatusBadge";
 import {
   FilterBar,
   FilterField,
-  filterControlClass,
 } from "@/shared/ui/FilterBar";
-import { PrimaryButton, RowActions } from "@/shared/ui/CrudUi";
+import {
+  PrimaryButton,
+  RowActions,
+  TextInput
+} from "@/shared/ui/CrudUi";
 import { useConfirm } from "@/shared/ui/ConfirmDialog";
 import {
   EmployeeCreateModal,
@@ -21,10 +24,12 @@ import { formatUserRoleLabels, getUserRoleIds } from "@/entities/employee/roles"
 import { auditColumns, sortByCreatedAtDesc } from "@/shared/lib/list-columns";
 import { localizeRoleName, useI18n } from "@/shared/i18n";
 import { useMockStore } from "@/data/mock/store";
+import { useModulePermission } from "@/shared/config/menu-permissions";
 import type { User } from "@/entities/types";
 
 export default function EmployeesPage() {
   const { t, locale } = useI18n();
+  const perm = useModulePermission("employees");
   const { employees, roles, removeEmployee } = useMockStore();
   const confirm = useConfirm();
   const [keyword, setKeyword] = useState("");
@@ -92,7 +97,7 @@ export default function EmployeesPage() {
       render: (r) => (
         <RowActions
           onDetail={() => setDetailId(r.id)}
-          onDelete={() => void handleDelete(r)}
+          onDelete={perm.canDelete ? () => void handleDelete(r) : undefined}
         />
       ),
     },
@@ -102,14 +107,14 @@ export default function EmployeesPage() {
     <ListPageLayout>
       <PageHeader
         title={t("employees.title")}
-        actions={
+        actions={perm.canCreate ? (
           <PrimaryButton onClick={() => setCreateOpen(true)}>{t("employees.new")}</PrimaryButton>
-        }
+        ) : null}
       />
       <FilterBar>
         <FilterField label={t("common.keyword")}>
-          <input
-            className={filterControlClass}
+          <TextInput
+            size="sm"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder={t("form.keywordEmployee")}
@@ -130,7 +135,7 @@ export default function EmployeesPage() {
         />
       ) : null}
       {detailId ? (
-        <EmployeeDetailModal
+        <EmployeeDetailModal readOnly={!perm.canEdit}
           open
           onClose={() => setDetailId(null)}
           id={detailId}

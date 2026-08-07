@@ -17,9 +17,13 @@ import { StatusBadge } from "@/shared/ui/StatusBadge";
 import {
   FilterBar,
   FilterField,
-  filterControlClass,
 } from "@/shared/ui/FilterBar";
-import { PrimaryButton, RowActions, Select } from "@/shared/ui/CrudUi";
+import {
+  PrimaryButton,
+  RowActions,
+  Select,
+  TextInput
+} from "@/shared/ui/CrudUi";
 import { useConfirm } from "@/shared/ui/ConfirmDialog";
 import {
   PaymentCreateModal,
@@ -31,9 +35,10 @@ import { formatWeighDateTime } from "@/shared/lib/date";
 import { auditColumns, sortByCreatedAtDesc } from "@/shared/lib/list-columns";
 import { isMiscPayment } from "@/entities/payment/meta";
 import { aggregatePaymentStructure } from "@/entities/payment/structure";
-import { paymentTicketBxNo } from "@/entities/settlement";
+import { paymentSettlementDocNo } from "@/entities/settlement";
 import { localizeMiscKind, useI18n } from "@/shared/i18n";
 import { useMockStore } from "@/data/mock/store";
+import { useModulePermission } from "@/shared/config/menu-permissions";
 import type { PaymentRecord } from "@/entities/types";
 
 const SUMMARY_EXPANDED_KEY = "bx-payments-summary-expanded";
@@ -69,6 +74,7 @@ function writeSummaryExpanded(expanded: boolean) {
 
 export default function PaymentsPage() {
   const { t } = useI18n();
+  const perm = useModulePermission("payments");
   const { payments, removePayment } = useMockStore();
   const confirm = useConfirm();
   const [keyword, setKeyword] = useState("");
@@ -87,10 +93,10 @@ export default function PaymentsPage() {
       payments.filter((p) => {
         if (type !== "all" && p.type !== type) return false;
         if (category !== "all" && p.category !== category) return false;
-        const bx = paymentTicketBxNo(p);
+        const docNo = paymentSettlementDocNo(p);
         if (
           keyword &&
-          !`${p.counterparty}${p.allocationSummary}${p.method}${p.miscKind ?? ""}${bx}`
+          !`${p.counterparty}${p.allocationSummary}${p.method}${p.miscKind ?? ""}${docNo}${p.contractNo ?? ""}`
             .toLowerCase()
             .includes(keyword.toLowerCase())
         ) {
@@ -157,12 +163,22 @@ export default function PaymentsPage() {
         ),
     },
     {
-      key: "ticket",
-      header: t("form.relatedTicket"),
+      key: "contract",
+      header: t("payments.colContract"),
+      render: (r) =>
+        r.contractNo ? (
+          <span className="font-medium tabular-nums">{r.contractNo}</span>
+        ) : (
+          <span className="text-muted">—</span>
+        ),
+    },
+    {
+      key: "settlementDoc",
+      header: t("payments.colSettlementDoc"),
       render: (r) => {
-        const bx = paymentTicketBxNo(r);
-        return bx ? (
-          <span className="font-medium tabular-nums">BX{bx}</span>
+        const docNo = paymentSettlementDocNo(r);
+        return docNo ? (
+          <span className="font-medium tabular-nums">{docNo}</span>
         ) : (
           <span className="text-muted">—</span>
         );
@@ -190,7 +206,7 @@ export default function PaymentsPage() {
       render: (r) => (
         <RowActions
           onDetail={() => setDetailId(r.id)}
-          onDelete={() => void handleDelete(r)}
+          onDelete={perm.canDelete ? () => void handleDelete(r) : undefined}
         />
       ),
     },
@@ -227,11 +243,11 @@ export default function PaymentsPage() {
     <ListPageLayout>
       <PageHeader
         title={t("payments.title")}
-        actions={
+        actions={perm.canCreate ? (
           <PrimaryButton onClick={() => setCreateOpen(true)}>
             {t("payments.new")}
           </PrimaryButton>
-        }
+        ) : null}
       />
 
       <div className="mb-4">
@@ -271,8 +287,8 @@ export default function PaymentsPage() {
 
       <FilterBar>
         <FilterField label={t("common.keyword")}>
-          <input
-            className={filterControlClass}
+          <TextInput
+            size="sm"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder={t("form.keywordPayment")}
@@ -317,7 +333,7 @@ export default function PaymentsPage() {
         />
       ) : null}
       {detailId ? (
-        <PaymentDetailModal
+        <PaymentDetailModal readOnly={!perm.canEdit}
           open
           onClose={() => setDetailId(null)}
           id={detailId}

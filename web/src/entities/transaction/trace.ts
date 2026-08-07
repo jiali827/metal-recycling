@@ -36,26 +36,32 @@ export interface ContractTrace {
   };
 }
 
-function paymentsForTicket(bxNo: string, payments: PaymentRecord[]): PaymentRecord[] {
-  return payments.filter(
-    (p) =>
-      p.category === "settlement" &&
-      (p.ticketBxNo === bxNo ||
-        p.allocationSummary.toUpperCase().includes(`BX${bxNo}`.toUpperCase())),
-  );
-}
-
-function paymentsForTickets(tickets: WeighTicket[], payments: PaymentRecord[]): PaymentRecord[] {
+function paymentsForContract(
+  contract: ContractTraceItem,
+  tickets: WeighTicket[],
+  payments: PaymentRecord[],
+): PaymentRecord[] {
+  const bxNos = new Set(tickets.map((t) => t.bxNo));
   const seen = new Set<string>();
   const result: PaymentRecord[] = [];
-  for (const ticket of tickets) {
-    for (const p of paymentsForTicket(ticket.bxNo, payments)) {
-      if (!seen.has(p.id)) {
-        seen.add(p.id);
-        result.push(p);
-      }
+
+  for (const p of payments) {
+    if (p.category !== "settlement") continue;
+    if (seen.has(p.id)) continue;
+
+    const byContract = p.contractNo === contract.no;
+    const legacyBx = (p as PaymentRecord & { ticketBxNo?: string }).ticketBxNo;
+    const byLegacyBx = Boolean(legacyBx && bxNos.has(legacyBx));
+    const byAllocation = [...bxNos].some((bx) =>
+      p.allocationSummary.toUpperCase().includes(`BX${bx}`.toUpperCase()),
+    );
+
+    if (byContract || byLegacyBx || byAllocation) {
+      seen.add(p.id);
+      result.push(p);
     }
   }
+
   return result.sort((a, b) => b.date.localeCompare(a.date));
 }
 
@@ -117,11 +123,12 @@ function buildOneTrace(
   payments: PaymentRecord[],
 ): ContractTrace {
   const tickets = ticketsForContract(contract, weighTickets);
-  const bxNos = new Set(tickets.map((t) => t.bxNo));
   const settlementKind: SettlementKind =
     contract.type === "sale" ? "receivable" : "payable";
   const pool = settlementKind === "receivable" ? receivables : payables;
-  const settlements = pool.filter((s) => bxNos.has(s.ticketBxNo));
+  const settlements = pool.filter(
+    (s) => s.contractNo === contract.no || s.contractId === contract.id,
+  );
   const normalTickets = tickets.filter((t) => t.status === "normal");
   const totalAmount = normalTickets.reduce((s, t) => s + t.amount, 0);
   const totalNetKg = normalTickets.reduce((s, t) => s + t.netKg, 0);
@@ -139,7 +146,7 @@ function buildOneTrace(
     tickets,
     settlements,
     settlementKind,
-    payments: paymentsForTickets(tickets, payments),
+    payments: paymentsForContract(contract, tickets, payments),
     summary: {
       ticketCount: tickets.length,
       normalTicketCount: normalTickets.length,

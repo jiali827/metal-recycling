@@ -20,9 +20,13 @@ import { StatusBadge } from "@/shared/ui/StatusBadge";
 import {
   FilterBar,
   FilterField,
-  filterControlClass,
 } from "@/shared/ui/FilterBar";
-import { PrimaryButton, RowActions, Select } from "@/shared/ui/CrudUi";
+import {
+  PrimaryButton,
+  RowActions,
+  Select,
+  TextInput
+} from "@/shared/ui/CrudUi";
 import { useConfirm } from "@/shared/ui/ConfirmDialog";
 import {
   CustomerCreateModal,
@@ -39,6 +43,8 @@ import { formatMoney } from "@/shared/lib/format";
 import { getSettlementStatusLabel, useI18n } from "@/shared/i18n";
 import { auditColumns, sortByCreatedAtDesc } from "@/shared/lib/list-columns";
 import { useMockStore } from "@/data/mock/store";
+import { useModulePermission } from "@/shared/config/menu-permissions";
+import { formatCustomerContactSummary, customerKeywordBlob } from "@/entities/customer/display";
 import type { Customer } from "@/entities/types";
 
 const SUMMARY_EXPANDED_KEY = "bx-customers-summary-expanded";
@@ -73,6 +79,7 @@ function writeSummaryExpanded(expanded: boolean) {
 
 export default function CustomersPage() {
   const { t } = useI18n();
+  const perm = useModulePermission("customers");
   const {
     customers,
     customerCategories,
@@ -112,9 +119,7 @@ export default function CustomersPage() {
         if (category !== "all" && c.category !== category) return false;
         if (
           keyword &&
-          !`${c.name}${c.contact ?? ""}`
-            .toLowerCase()
-            .includes(keyword.toLowerCase())
+          !customerKeywordBlob(c).toLowerCase().includes(keyword.toLowerCase())
         ) {
           return false;
         }
@@ -151,9 +156,21 @@ export default function CustomersPage() {
 
   const columns: Column<Customer>[] = [
     {
+      key: "customerNo",
+      header: t("customers.colCustomerNo"),
+      render: (r) => <span className="font-medium tabular-nums">{r.customerNo}</span>,
+    },
+    {
       key: "name",
       header: t("customers.colName"),
-      render: (r) => <span className="font-medium">{r.name}</span>,
+      render: (r) => (
+        <div>
+          <span className="font-medium">{r.name}</span>
+          {r.siteName ? (
+            <div className="text-xs text-muted">{r.siteName}</div>
+          ) : null}
+        </div>
+      ),
     },
     {
       key: "category",
@@ -163,7 +180,7 @@ export default function CustomersPage() {
     {
       key: "contact",
       header: t("customers.colContact"),
-      render: (r) => r.contact ?? "—",
+      render: (r) => formatCustomerContactSummary(r) || "—",
     },
     {
       key: "arBalance",
@@ -171,10 +188,9 @@ export default function CustomersPage() {
       className: "text-right",
       render: (r) => {
         const bal = getCustomerSettlement(settlementMap, r.name).arBalance;
+        if (bal === 0) return <span className="text-muted">—</span>;
         return (
-          <span
-            className={`tabular-nums ${bal > 0 ? "font-medium text-foreground" : "text-muted"}`}
-          >
+          <span className="font-medium tabular-nums text-foreground">
             {formatMoney(bal)}
           </span>
         );
@@ -186,10 +202,9 @@ export default function CustomersPage() {
       className: "text-right",
       render: (r) => {
         const bal = getCustomerSettlement(settlementMap, r.name).apBalance;
+        if (bal === 0) return <span className="text-muted">—</span>;
         return (
-          <span
-            className={`tabular-nums ${bal > 0 ? "font-medium text-foreground" : "text-muted"}`}
-          >
+          <span className="font-medium tabular-nums text-foreground">
             {formatMoney(bal)}
           </span>
         );
@@ -213,7 +228,7 @@ export default function CustomersPage() {
       render: (r) => (
         <RowActions
           onDetail={() => setDetailId(r.id)}
-          onDelete={() => void handleDelete(r)}
+          onDelete={perm.canDelete ? () => void handleDelete(r) : undefined}
         />
       ),
     },
@@ -273,9 +288,11 @@ export default function CustomersPage() {
             <Link href="/customers/categories" className="ui-btn-secondary">
               {t("customers.manageCategories")}
             </Link>
-            <PrimaryButton onClick={() => setCreateOpen(true)}>
-              {t("customers.new")}
-            </PrimaryButton>
+            {perm.canCreate ? (
+              <PrimaryButton onClick={() => setCreateOpen(true)}>
+                {t("customers.new")}
+              </PrimaryButton>
+            ) : null}
           </div>
         }
       />
@@ -317,8 +334,8 @@ export default function CustomersPage() {
 
       <FilterBar>
         <FilterField label={t("common.keyword")}>
-          <input
-            className={filterControlClass}
+          <TextInput
+            size="sm"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder={t("customers.keywordPlaceholder")}
@@ -350,7 +367,7 @@ export default function CustomersPage() {
         />
       ) : null}
       {detailId ? (
-        <CustomerDetailModal
+        <CustomerDetailModal readOnly={!perm.canEdit}
           open
           onClose={() => setDetailId(null)}
           id={detailId}

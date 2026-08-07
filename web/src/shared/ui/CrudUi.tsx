@@ -13,6 +13,7 @@ export {
   DatePicker,
   DateRangePicker,
   DateTimePicker,
+  TextInput,
   Checkbox,
   Radio,
   RadioGroup,
@@ -66,15 +67,15 @@ export function FormActions({
 
   return (
     <div className="flex gap-3 pt-2">
-      <button type="submit" className="ui-btn-primary h-10 px-5">
+      <button type="submit" className="ui-btn-primary px-5">
         {saveLabel}
       </button>
       {onCancel ? (
-        <button type="button" className="ui-btn-secondary h-10" onClick={onCancel}>
+        <button type="button" className="ui-btn-secondary" onClick={onCancel}>
           {cancelLabel}
         </button>
       ) : cancelHref ? (
-        <Link href={cancelHref} className="ui-btn-secondary h-10">
+        <Link href={cancelHref} className="ui-btn-secondary">
           {cancelLabel}
         </Link>
       ) : null}
@@ -134,7 +135,7 @@ export function NotFoundCard({ backHref }: { backHref: string }) {
     <div className="ui-card max-w-lg p-8 text-center">
       <p className="text-base font-medium text-foreground">{t("common.notFound")}</p>
       <p className="mt-2 text-sm text-muted">{t("common.notFoundHint")}</p>
-      <Link href={backHref} className="ui-btn-secondary mt-5 inline-flex h-10">
+      <Link href={backHref} className="ui-btn-secondary mt-5">
         {t("common.back")}
       </Link>
     </div>
@@ -173,7 +174,7 @@ export function RowActions({
 }: {
   onDetail?: () => void;
   detailHref?: string;
-  onDelete: () => void;
+  onDelete?: () => void;
 }) {
   const { t } = useI18n();
   const detailClass =
@@ -205,17 +206,19 @@ export function RowActions({
           <PencilSimple size={14} />
         </button>
       ) : null}
-      <button
-        type="button"
-        className={deleteClass}
-        aria-label={t("common.delete")}
-        onClick={(e) => {
-          e.stopPropagation();
-          onDelete();
-        }}
-      >
-        <Trash size={14} />
-      </button>
+      {onDelete ? (
+        <button
+          type="button"
+          className={deleteClass}
+          aria-label={t("common.delete")}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+        >
+          <Trash size={14} />
+        </button>
+      ) : null}
     </div>
   );
 }

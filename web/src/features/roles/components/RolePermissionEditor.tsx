@@ -21,14 +21,16 @@ const ACTION_LABEL_KEYS: Record<ButtonActionId, MessageKey> = {
 export function RolePermissionEditor({
   value,
   onChange,
+  disabled = false,
 }: {
   value: RoleAccessMap;
   onChange: (next: RoleAccessMap) => void;
+  disabled?: boolean;
 }) {
   const { t } = useI18n();
 
   return (
-    <div className="ui-perm-editor">
+    <div className={`ui-perm-editor${disabled ? " opacity-80" : ""}`} aria-disabled={disabled}>
       <div className="ui-perm-matrix">
         <div className="ui-perm-matrix-head ui-perm-matrix-head--two-col">
           <span>{t("permissions.colModule")}</span>
@@ -54,10 +56,12 @@ export function RolePermissionEditor({
                           <Checkbox
                             key={action}
                             checked={checked}
+                            disabled={disabled}
                             label={t(ACTION_LABEL_KEYS[action])}
-                            onChange={(on) =>
-                              onChange(toggleModuleButton(value, mod.id, action, on))
-                            }
+                            onChange={(on) => {
+                              if (disabled) return;
+                              onChange(toggleModuleButton(value, mod.id, action, on));
+                            }}
                           />
                         );
                       })}

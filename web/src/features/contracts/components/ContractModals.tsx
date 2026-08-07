@@ -20,17 +20,29 @@ import {
   type ContractAttachmentValue,
 } from "@/features/contracts/components/ContractUploadZone";
 import { todayISO } from "@/shared/lib/date";
+import { useMoneyUnits } from "@/shared/lib/use-money-units";
 import { useMockStore } from "@/data/mock/store";
 import { useI18n } from "@/shared/i18n";
 import {
   ensureSaleLineAmounts,
 } from "@/entities/contract/form";
 import {
+  nextPurchaseContractNo,
+  yearFromQuotedOn,
+} from "@/entities/contract/purchase-no";
+import {
   kgToTons,
+  purchaseValidity,
   saleContractReadyToComplete,
+  saleFulfillmentPhase,
   saleLineAmount,
   tonsToKg,
 } from "@/entities/contract/summaries";
+import {
+  purchaseValidityTone,
+  saleFulfillmentTone,
+} from "@/entities/contract/status";
+import { StatusBadge } from "@/shared/ui/StatusBadge";
 import type {
   PurchaseContractLine,
   PurchaseContractStatus,
@@ -42,6 +54,25 @@ import type { ReactNode } from "react";
 
 const CONTRACT_MODAL_BODY =
   "ui-modal-body flex min-h-0 flex-1 flex-col overflow-hidden px-7 pb-4 pt-2";
+
+function purchaseValidityText(
+  v: ReturnType<typeof purchaseValidity>,
+  t: ReturnType<typeof useI18n>["t"],
+) {
+  if (v === "expired") return t("contracts.validityExpired");
+  if (v === "no_expiry") return t("contracts.validityNoExpiry");
+  return t("contracts.validityInForce");
+}
+
+function saleFulfillmentText(
+  phase: ReturnType<typeof saleFulfillmentPhase>,
+  t: ReturnType<typeof useI18n>["t"],
+) {
+  if (phase === "in_progress") return t("contracts.fulfillmentInProgress");
+  if (phase === "ready") return t("contracts.fulfillmentReady");
+  if (phase === "over") return t("contracts.fulfillmentOver");
+  return t("contracts.fulfillmentNone");
+}
 
 function ContractModalSplit({
   attachment,
@@ -101,7 +132,8 @@ function buildProjectOptions(
   if (current && !opts.some((o) => o.value === current)) {
     opts.unshift({ value: current, label: current });
   }
-  return [{ value: "", label: "—" }, ...opts];
+  // 不插入 value="" 的 "—" 伪选项：空态走 placeholder + 清空按钮，避免 SearchableSelect 用 "—" 当搜索词滤光选项
+  return opts;
 }
 
 /* ───────────── Purchase ───────────── */
@@ -116,7 +148,13 @@ export function PurchaseContractCreateModal({
   onCreated?: (id: string) => void;
 }) {
   const { t } = useI18n();
-  const { addPurchaseContract, customers, projectTypes } = useMockStore();
+  const {
+    addPurchaseContract,
+    purchaseContracts,
+    customers,
+    projectTypes,
+    tenant,
+  } = useMockStore();
   const [no, setNo] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [contactName, setContactName] = useState("");
@@ -127,6 +165,7 @@ export function PurchaseContractCreateModal({
   const [remarks, setRemarks] = useState("");
   const [lines, setLines] = useState<PurchaseContractLine[]>([emptyPurchaseLine()]);
   const [attachment, setAttachment] = useState<ContractAttachmentValue | null>(null);
+  const [noError, setNoError] = useState("");
 
   const priceModeOptions = useMemo(
     () => [
@@ -139,24 +178,49 @@ export function PurchaseContractCreateModal({
 
   useEffect(() => {
     if (!open) return;
-    setNo("");
+    const quoted = todayISO();
     setCustomerId("");
     setContactName("");
     setProject("");
     setStatus("active");
-    setQuotedOn(todayISO());
+    setQuotedOn(quoted);
     setValidUntil("");
     setRemarks("");
     setLines([emptyPurchaseLine()]);
     setAttachment(null);
-  }, [open]);
+    setNoError("");
+    setNo(
+      nextPurchaseContractNo(purchaseContracts, {
+        abbr: tenant.abbr,
+        year: yearFromQuotedOn(quoted),
+      }),
+    );
+  }, [open, purchaseContracts, tenant.abbr]);
+
+  useEffect(() => {
+    if (!open) return;
+    const next = nextPurchaseContractNo(purchaseContracts, {
+      abbr: tenant.abbr,
+      year: yearFromQuotedOn(quotedOn, todayISO()),
+    });
+    setNo(next);
+    if (next) setNoError("");
+  }, [open, quotedOn, purchaseContracts, tenant.abbr]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (lines.length === 0 || lines.some((l) => !(l.materialTypeId || l.materialName.trim()))) return;
+    const assignedNo = nextPurchaseContractNo(purchaseContracts, {
+      abbr: tenant.abbr,
+      year: yearFromQuotedOn(quotedOn, todayISO()),
+    });
+    if (!assignedNo) {
+      setNoError(t("contracts.purchaseNoNeedAbbr"));
+      return;
+    }
     const customer = customers.find((c) => c.id === customerId);
     const row = addPurchaseContract({
-      no,
+      no: assignedNo,
       customerId,
       customerName: customer?.name ?? t("form.unnamedCustomer"),
       contactName: contactName || undefined,
@@ -164,7 +228,7 @@ export function PurchaseContractCreateModal({
       status,
       quotedOn,
       validUntil: validUntil || undefined,
-      currency: "HKD",
+      currency: tenant.currency,
       lines,
       remarks: remarks || undefined,
       attachmentName: attachment?.fileName,
@@ -196,11 +260,27 @@ export function PurchaseContractCreateModal({
         <ContractModalSplit attachment={attachment} onAttachmentChange={setAttachment}>
           <FormSection title={t("form.contractDetail")}>
             <FormFieldGrid>
-              <FormField label={t("fields.contractNo")} required>
-                <input className={inputClass} required value={no} onChange={(e) => setNo(e.target.value)} />
+              <FormField
+                label={t("fields.contractNo")}
+                required
+                hint={t("contracts.purchaseNoAutoHint")}
+                error={noError || undefined}
+              >
+                <input
+                  className={inputClass}
+                  value={no}
+                  readOnly
+                  disabled
+                  aria-readonly
+                />
               </FormField>
-              <FormField label={t("contracts.quotedOn")} required>
-                <DatePicker value={quotedOn} onChange={setQuotedOn} />
+              <FormField label={t("contracts.project")}>
+                <SearchableSelect
+                  value={project}
+                  onChange={setProject}
+                  options={buildProjectOptions(projectTypes, project)}
+                  placeholder={t("form.selectPlaceholder")}
+                />
               </FormField>
               <FormField label={t("form.counterpartyCustomer")} required>
                 <SearchableSelect
@@ -210,30 +290,38 @@ export function PurchaseContractCreateModal({
                   placeholder={t("form.selectCustomer")}
                 />
               </FormField>
+              <FormField label={t("contracts.contactName")}>
+                <input className={inputClass} value={contactName} onChange={(e) => setContactName(e.target.value)} />
+              </FormField>
+              <FormField label={t("contracts.quotedOn")} required>
+                <DatePicker value={quotedOn} onChange={setQuotedOn} />
+              </FormField>
+              <FormField label={t("contracts.validUntil")}>
+                <DatePicker value={validUntil} onChange={setValidUntil} />
+              </FormField>
               <FormField label={t("common.status")}>
-                <Select
+                <OptionField
                   value={status}
                   onChange={(v) => setStatus(v as PurchaseContractStatus)}
                   options={[
                     { value: "draft", label: t("status.draft") },
-                    { value: "active", label: t("contracts.statusValid") },
-                    { value: "expired", label: t("status.expired") },
+                    { value: "active", label: t("contracts.statusEnabled") },
                     { value: "closed", label: t("status.closed") },
                   ]}
+                  aria-label={t("common.status")}
                 />
               </FormField>
-              <FormField label={t("contracts.contactName")}>
-                <input className={inputClass} value={contactName} onChange={(e) => setContactName(e.target.value)} />
-              </FormField>
-              <FormField label={t("contracts.project")}>
-                <SearchableSelect
-                  value={project}
-                  onChange={setProject}
-                  options={buildProjectOptions(projectTypes, project)}
-                />
-              </FormField>
-              <FormField label={t("contracts.validUntil")}>
-                <DatePicker value={validUntil} onChange={setValidUntil} />
+              <FormField label={t("contracts.validity")}>
+                {(() => {
+                  const v = purchaseValidity({ validUntil }, todayISO());
+                  return (
+                    <div className="ui-form-value">
+                      <StatusBadge tone={purchaseValidityTone(v)}>
+                        {purchaseValidityText(v, t)}
+                      </StatusBadge>
+                    </div>
+                  );
+                })()}
               </FormField>
             </FormFieldGrid>
           </FormSection>
@@ -260,10 +348,12 @@ export function PurchaseContractDetailModal({
   open,
   onClose,
   id,
+  readOnly = false
 }: {
   open: boolean;
   onClose: () => void;
   id: string | null;
+  readOnly?: boolean;
 }) {
   const { t } = useI18n();
   const { purchaseContracts, customers, projectTypes, updatePurchaseContract } = useMockStore();
@@ -310,10 +400,11 @@ export function PurchaseContractDetailModal({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (readOnly) return;
     if (!row || lines.length === 0) return;
     const customer = customers.find((c) => c.id === customerId);
     updatePurchaseContract(row.id, {
-      no,
+      no: row.no,
       customerId,
       customerName: customer?.name ?? row.customerName,
       contactName: contactName || undefined,
@@ -347,9 +438,11 @@ export function PurchaseContractDetailModal({
             <button type="button" className="ui-btn-secondary" onClick={onClose}>
               {t("common.close")}
             </button>
+            {!readOnly ? (
             <button type="submit" form="purchase-contract-edit" className="ui-btn-primary">
               {t("common.save")}
             </button>
+          ) : null}
           </>
         ) : (
           <button type="button" className="ui-btn-secondary" onClick={onClose}>
@@ -365,39 +458,62 @@ export function PurchaseContractDetailModal({
           <ContractModalSplit attachment={attachment} onAttachmentChange={setAttachment}>
             <FormSection title={t("form.contractDetail")}>
               <FormFieldGrid>
-                <FormField label={t("fields.contractNo")} required>
-                  <input className={inputClass} required value={no} onChange={(e) => setNo(e.target.value)} />
-                </FormField>
-                <FormField label={t("contracts.quotedOn")} required>
-                  <DatePicker value={quotedOn} onChange={setQuotedOn} />
-                </FormField>
-                <FormField label={t("form.counterpartyCustomer")} required>
-                  <SearchableSelect value={customerId} onChange={setCustomerId} options={customerOptions} />
-                </FormField>
-                <FormField label={t("common.status")}>
-                  <Select
-                    value={status}
-                    onChange={(v) => setStatus(v as PurchaseContractStatus)}
-                    options={[
-                      { value: "draft", label: t("status.draft") },
-                      { value: "active", label: t("contracts.statusValid") },
-                      { value: "expired", label: t("status.expired") },
-                      { value: "closed", label: t("status.closed") },
-                    ]}
+                <FormField
+                  label={t("fields.contractNo")}
+                  required
+                  hint={t("contracts.purchaseNoAutoHint")}
+                >
+                  <input
+                    className={inputClass}
+                    value={no}
+                    readOnly
+                    disabled
+                    aria-readonly
                   />
-                </FormField>
-                <FormField label={t("contracts.contactName")}>
-                  <input className={inputClass} value={contactName} onChange={(e) => setContactName(e.target.value)} />
                 </FormField>
                 <FormField label={t("contracts.project")}>
                   <SearchableSelect
                     value={project}
                     onChange={setProject}
                     options={buildProjectOptions(projectTypes, project)}
+                    placeholder={t("form.selectPlaceholder")}
                   />
+                </FormField>
+                <FormField label={t("form.counterpartyCustomer")} required>
+                  <SearchableSelect value={customerId} onChange={setCustomerId} options={customerOptions} />
+                </FormField>
+                <FormField label={t("contracts.contactName")}>
+                  <input className={inputClass} value={contactName} onChange={(e) => setContactName(e.target.value)} />
+                </FormField>
+                <FormField label={t("contracts.quotedOn")} required>
+                  <DatePicker value={quotedOn} onChange={setQuotedOn} />
                 </FormField>
                 <FormField label={t("contracts.validUntil")}>
                   <DatePicker value={validUntil} onChange={setValidUntil} />
+                </FormField>
+                <FormField label={t("common.status")}>
+                  <OptionField
+                    value={status}
+                    onChange={(v) => setStatus(v as PurchaseContractStatus)}
+                    options={[
+                      { value: "draft", label: t("status.draft") },
+                      { value: "active", label: t("contracts.statusEnabled") },
+                      { value: "closed", label: t("status.closed") },
+                    ]}
+                    aria-label={t("common.status")}
+                  />
+                </FormField>
+                <FormField label={t("contracts.validity")}>
+                  {(() => {
+                    const v = purchaseValidity({ validUntil }, todayISO());
+                    return (
+                      <div className="ui-form-value">
+                        <StatusBadge tone={purchaseValidityTone(v)}>
+                          {purchaseValidityText(v, t)}
+                        </StatusBadge>
+                      </div>
+                    );
+                  })()}
                 </FormField>
               </FormFieldGrid>
             </FormSection>
@@ -433,6 +549,8 @@ function PurchaseLinesEditor({
 }) {
   const { t } = useI18n();
   const { materialTypes } = useMockStore();
+  const moneyUnits = useMoneyUnits();
+  const priceUnit = moneyUnits.moneyPerTon(t("contracts.unitTon"));
   const options = useMemo(() => {
     const list = materialTypes
       .filter((m) => m.enabled && m.forPurchase)
@@ -468,7 +586,7 @@ function PurchaseLinesEditor({
         </span>
         <span>{t("contracts.priceMode")}</span>
         <span>
-          {t("contracts.unitPrice")}
+          {t("contracts.unitPrice")}（{priceUnit}）
           <span className="text-danger"> *</span>
         </span>
         <span className="sr-only">{t("common.delete")}</span>
@@ -559,7 +677,8 @@ export function SaleContractCreateModal({
   onCreated?: (id: string) => void;
 }) {
   const { t } = useI18n();
-  const { addSaleContract, customers } = useMockStore();
+  const { addSaleContract, customers, tenant } = useMockStore();
+  const moneyUnits = useMoneyUnits();
   const [no, setNo] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [status, setStatus] = useState<SaleContractStatus>("active");
@@ -568,12 +687,6 @@ export function SaleContractCreateModal({
   const [fulfillBy, setFulfillBy] = useState("");
   const [tolerancePercent, setTolerancePercent] = useState("10");
   const [totalAmount, setTotalAmount] = useState("");
-  const [priceTerms, setPriceTerms] = useState("");
-  const [origin, setOrigin] = useState("");
-  const [destination, setDestination] = useState("");
-  const [packingSummary, setPackingSummary] = useState("");
-  const [bankAccountSummary, setBankAccountSummary] = useState("");
-  const [remarks, setRemarks] = useState("");
   const [lines, setLines] = useState<SaleContractLine[]>([emptySaleLine()]);
   const [attachment, setAttachment] = useState<ContractAttachmentValue | null>(null);
 
@@ -587,12 +700,6 @@ export function SaleContractCreateModal({
     setFulfillBy("");
     setTolerancePercent("10");
     setTotalAmount("");
-    setPriceTerms("");
-    setOrigin("");
-    setDestination("");
-    setPackingSummary("");
-    setBankAccountSummary("");
-    setRemarks("");
     setLines([emptySaleLine()]);
     setAttachment(null);
   }, [open]);
@@ -615,15 +722,9 @@ export function SaleContractCreateModal({
       paymentTerms: paymentTerms || undefined,
       fulfillBy: fulfillBy || undefined,
       tolerancePercent: tolerancePercent === "" ? undefined : Number(tolerancePercent),
-      currency: "HKD",
+      currency: tenant.currency,
       totalAmount: totalAmount === "" ? undefined : Number(totalAmount),
-      priceTerms: priceTerms || undefined,
-      origin: origin || undefined,
-      destination: destination || undefined,
-      packingSummary: packingSummary || undefined,
-      bankAccountSummary: bankAccountSummary || undefined,
       lines: withAmounts,
-      remarks: remarks || undefined,
       attachmentName: attachment?.fileName,
       attachmentDataUrl: attachment?.dataUrl,
     });
@@ -656,9 +757,6 @@ export function SaleContractCreateModal({
               <FormField label={t("fields.contractNo")} required>
                 <input className={inputClass} required value={no} onChange={(e) => setNo(e.target.value)} />
               </FormField>
-              <FormField label={t("fields.signedDate")} required>
-                <DatePicker value={signedOn} onChange={setSignedOn} />
-              </FormField>
               <FormField label={t("form.counterpartyCustomer")} required>
                 <SearchableSelect
                   value={customerId}
@@ -666,23 +764,6 @@ export function SaleContractCreateModal({
                   options={customers.map((c) => ({ value: c.id, label: c.name }))}
                   placeholder={t("form.selectCustomer")}
                 />
-              </FormField>
-              <FormField label={t("common.status")}>
-                <OptionField
-                  value={status}
-                  onChange={(v) => setStatus(v as SaleContractStatus)}
-                  options={[
-                    { value: "draft", label: t("status.draft") },
-                    { value: "active", label: t("status.active") },
-                    { value: "fulfilling", label: t("status.fulfilling") },
-                  ]}
-                />
-              </FormField>
-              <FormField label={t("contracts.paymentTerms")}>
-                <input className={inputClass} value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} />
-              </FormField>
-              <FormField label={t("contracts.fulfillBy")}>
-                <DatePicker value={fulfillBy} onChange={setFulfillBy} />
               </FormField>
               <FormField label={t("contracts.tolerancePercent")}>
                 <InputWithUnit
@@ -693,58 +774,64 @@ export function SaleContractCreateModal({
                 />
               </FormField>
               <FormField label={t("contracts.totalAmount")}>
-                <input
-                  className={inputClass}
+                <InputWithUnit
                   type="number"
                   value={totalAmount}
                   onChange={(e) => setTotalAmount(e.target.value)}
+                  unit={moneyUnits.money}
                 />
+              </FormField>
+              <FormFieldFull>
+                <FormField label={t("contracts.paymentTerms")}>
+                  <input className={inputClass} value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} />
+                </FormField>
+              </FormFieldFull>
+              <FormField label={t("fields.signedDate")} required>
+                <DatePicker value={signedOn} onChange={setSignedOn} />
+              </FormField>
+              <FormField label={t("contracts.fulfillBy")}>
+                <DatePicker value={fulfillBy} onChange={setFulfillBy} />
+              </FormField>
+              <FormField label={t("common.status")}>
+                <OptionField
+                  value={status}
+                  onChange={(v) => setStatus(v as SaleContractStatus)}
+                  options={[
+                    { value: "draft", label: t("status.draft") },
+                    { value: "active", label: t("status.active") },
+                  ]}
+                  aria-label={t("common.status")}
+                />
+              </FormField>
+              <FormField label={t("contracts.fulfillment")}>
+                {(() => {
+                  const phase = saleFulfillmentPhase({
+                    id: "new",
+                    no,
+                    customerId,
+                    customerName: "",
+                    status,
+                    signedOn,
+                    currency: tenant.currency,
+                    lines,
+                    tolerancePercent:
+                      tolerancePercent === "" ? undefined : Number(tolerancePercent),
+                    createdAt: "",
+                    updatedAt: "",
+                  });
+                  return (
+                    <div className="ui-form-value">
+                      <StatusBadge tone={saleFulfillmentTone(phase)}>
+                        {saleFulfillmentText(phase, t)}
+                      </StatusBadge>
+                    </div>
+                  );
+                })()}
               </FormField>
             </FormFieldGrid>
           </FormSection>
           <FormSection title={t("contracts.lines")}>
             <SaleLinesEditor lines={lines} onChange={setLines} showFulfilled={false} />
-          </FormSection>
-          <FormSection title={t("form.sectionOptional")}>
-            <FormFieldGrid>
-              <FormField label={t("contracts.priceTerms")}>
-                <input className={inputClass} value={priceTerms} onChange={(e) => setPriceTerms(e.target.value)} />
-              </FormField>
-              <FormField label={t("contracts.origin")}>
-                <input className={inputClass} value={origin} onChange={(e) => setOrigin(e.target.value)} />
-              </FormField>
-              <FormField label={t("contracts.destination")}>
-                <input className={inputClass} value={destination} onChange={(e) => setDestination(e.target.value)} />
-              </FormField>
-              <FormFieldFull>
-                <FormField label={t("contracts.packingSummary")}>
-                  <input
-                    className={inputClass}
-                    value={packingSummary}
-                    onChange={(e) => setPackingSummary(e.target.value)}
-                  />
-                </FormField>
-              </FormFieldFull>
-              <FormFieldFull>
-                <FormField label={t("contracts.bankAccountSummary")}>
-                  <input
-                    className={inputClass}
-                    value={bankAccountSummary}
-                    onChange={(e) => setBankAccountSummary(e.target.value)}
-                  />
-                </FormField>
-              </FormFieldFull>
-              <FormFieldFull>
-                <FormField label={t("contracts.remarks")}>
-                  <textarea
-                    className={inputClass}
-                    rows={2}
-                    value={remarks}
-                    onChange={(e) => setRemarks(e.target.value)}
-                  />
-                </FormField>
-              </FormFieldFull>
-            </FormFieldGrid>
           </FormSection>
         </ContractModalSplit>
       </form>
@@ -756,13 +843,16 @@ export function SaleContractDetailModal({
   open,
   onClose,
   id,
+  readOnly = false
 }: {
   open: boolean;
   onClose: () => void;
   id: string | null;
+  readOnly?: boolean;
 }) {
   const { t } = useI18n();
-  const { saleContracts, customers, updateSaleContract, weighTickets } = useMockStore();
+  const { saleContracts, customers, updateSaleContract, weighTickets, tenant } = useMockStore();
+  const moneyUnits = useMoneyUnits();
   const row = id ? saleContracts.find((c) => c.id === id) : undefined;
   const [no, setNo] = useState("");
   const [customerId, setCustomerId] = useState("");
@@ -772,12 +862,6 @@ export function SaleContractDetailModal({
   const [fulfillBy, setFulfillBy] = useState("");
   const [tolerancePercent, setTolerancePercent] = useState("10");
   const [totalAmount, setTotalAmount] = useState("");
-  const [priceTerms, setPriceTerms] = useState("");
-  const [origin, setOrigin] = useState("");
-  const [destination, setDestination] = useState("");
-  const [packingSummary, setPackingSummary] = useState("");
-  const [bankAccountSummary, setBankAccountSummary] = useState("");
-  const [remarks, setRemarks] = useState("");
   const [lines, setLines] = useState<SaleContractLine[]>([]);
   const [attachment, setAttachment] = useState<ContractAttachmentValue | null>(null);
   const [saved, setSaved] = useState(false);
@@ -792,12 +876,6 @@ export function SaleContractDetailModal({
     setFulfillBy(row.fulfillBy ?? "");
     setTolerancePercent(row.tolerancePercent == null ? "" : String(row.tolerancePercent));
     setTotalAmount(row.totalAmount == null ? "" : String(row.totalAmount));
-    setPriceTerms(row.priceTerms ?? "");
-    setOrigin(row.origin ?? "");
-    setDestination(row.destination ?? "");
-    setPackingSummary(row.packingSummary ?? "");
-    setBankAccountSummary(row.bankAccountSummary ?? "");
-    setRemarks(row.remarks ?? "");
     setLines(row.lines.map((l) => ({ ...l })));
     setAttachment(
       row.attachmentName
@@ -813,6 +891,7 @@ export function SaleContractDetailModal({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (readOnly) return;
     if (!row || lines.length === 0) return;
     const customer = customers.find((c) => c.id === customerId);
     const withAmounts = ensureSaleLineAmounts(
@@ -831,13 +910,8 @@ export function SaleContractDetailModal({
       fulfillBy: fulfillBy || undefined,
       tolerancePercent: tolerancePercent === "" ? undefined : Number(tolerancePercent),
       totalAmount: totalAmount === "" ? undefined : Number(totalAmount),
-      priceTerms: priceTerms || undefined,
-      origin: origin || undefined,
-      destination: destination || undefined,
-      packingSummary: packingSummary || undefined,
-      bankAccountSummary: bankAccountSummary || undefined,
+      currency: tenant.currency,
       lines: withAmounts,
-      remarks: remarks || undefined,
       attachmentName: attachment?.fileName,
       attachmentDataUrl: attachment?.dataUrl,
     });
@@ -870,9 +944,11 @@ export function SaleContractDetailModal({
             <button type="button" className="ui-btn-secondary" onClick={onClose}>
               {t("common.close")}
             </button>
+            {!readOnly ? (
             <button type="submit" form="sale-contract-edit" className="ui-btn-primary">
               {t("common.save")}
             </button>
+          ) : null}
           </>
         ) : (
           <button type="button" className="ui-btn-secondary" onClick={onClose}>
@@ -896,30 +972,8 @@ export function SaleContractDetailModal({
                 <FormField label={t("fields.contractNo")} required>
                   <input className={inputClass} required value={no} onChange={(e) => setNo(e.target.value)} />
                 </FormField>
-                <FormField label={t("fields.signedDate")} required>
-                  <DatePicker value={signedOn} onChange={setSignedOn} />
-                </FormField>
                 <FormField label={t("form.counterpartyCustomer")} required>
                   <SearchableSelect value={customerId} onChange={setCustomerId} options={customerOptions} />
-                </FormField>
-                <FormField label={t("common.status")}>
-                  <Select
-                    value={status}
-                    onChange={(v) => setStatus(v as SaleContractStatus)}
-                    options={[
-                      { value: "draft", label: t("status.draft") },
-                      { value: "active", label: t("status.active") },
-                      { value: "fulfilling", label: t("status.fulfilling") },
-                      { value: "completed", label: t("status.completed") },
-                      { value: "closed", label: t("status.closed") },
-                    ]}
-                  />
-                </FormField>
-                <FormField label={t("contracts.paymentTerms")}>
-                  <input className={inputClass} value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} />
-                </FormField>
-                <FormField label={t("contracts.fulfillBy")}>
-                  <DatePicker value={fulfillBy} onChange={setFulfillBy} />
                 </FormField>
                 <FormField label={t("contracts.tolerancePercent")}>
                   <InputWithUnit
@@ -930,12 +984,55 @@ export function SaleContractDetailModal({
                   />
                 </FormField>
                 <FormField label={t("contracts.totalAmount")}>
-                  <input
-                    className={inputClass}
+                  <InputWithUnit
                     type="number"
                     value={totalAmount}
                     onChange={(e) => setTotalAmount(e.target.value)}
+                    unit={moneyUnits.money}
                   />
+                </FormField>
+                <FormFieldFull>
+                  <FormField label={t("contracts.paymentTerms")}>
+                    <input className={inputClass} value={paymentTerms} onChange={(e) => setPaymentTerms(e.target.value)} />
+                  </FormField>
+                </FormFieldFull>
+                <FormField label={t("fields.signedDate")} required>
+                  <DatePicker value={signedOn} onChange={setSignedOn} />
+                </FormField>
+                <FormField label={t("contracts.fulfillBy")}>
+                  <DatePicker value={fulfillBy} onChange={setFulfillBy} />
+                </FormField>
+                <FormFieldFull>
+                  <FormField label={t("common.status")}>
+                    <OptionField
+                      value={status}
+                      onChange={(v) => setStatus(v as SaleContractStatus)}
+                      options={[
+                        { value: "draft", label: t("status.draft") },
+                        { value: "active", label: t("status.active") },
+                        { value: "completed", label: t("status.completed") },
+                        { value: "closed", label: t("status.closed") },
+                      ]}
+                      aria-label={t("common.status")}
+                    />
+                  </FormField>
+                </FormFieldFull>
+                <FormField label={t("contracts.fulfillment")}>
+                  {(() => {
+                    const phase = saleFulfillmentPhase({
+                      ...row,
+                      lines,
+                      tolerancePercent:
+                        tolerancePercent === "" ? undefined : Number(tolerancePercent),
+                    });
+                    return (
+                      <div className="ui-form-value">
+                        <StatusBadge tone={saleFulfillmentTone(phase)}>
+                          {saleFulfillmentText(phase, t)}
+                        </StatusBadge>
+                      </div>
+                    );
+                  })()}
                 </FormField>
               </FormFieldGrid>
             </FormSection>
@@ -946,47 +1043,6 @@ export function SaleContractDetailModal({
                 showFulfilled
                 canRemoveLine={(lineId) => !lineHasTickets(lineId)}
               />
-            </FormSection>
-            <FormSection title={t("form.sectionOptional")}>
-              <FormFieldGrid>
-                <FormField label={t("contracts.priceTerms")}>
-                  <input className={inputClass} value={priceTerms} onChange={(e) => setPriceTerms(e.target.value)} />
-                </FormField>
-                <FormField label={t("contracts.origin")}>
-                  <input className={inputClass} value={origin} onChange={(e) => setOrigin(e.target.value)} />
-                </FormField>
-                <FormField label={t("contracts.destination")}>
-                  <input className={inputClass} value={destination} onChange={(e) => setDestination(e.target.value)} />
-                </FormField>
-                <FormFieldFull>
-                  <FormField label={t("contracts.packingSummary")}>
-                    <input
-                      className={inputClass}
-                      value={packingSummary}
-                      onChange={(e) => setPackingSummary(e.target.value)}
-                    />
-                  </FormField>
-                </FormFieldFull>
-                <FormFieldFull>
-                  <FormField label={t("contracts.bankAccountSummary")}>
-                    <input
-                      className={inputClass}
-                      value={bankAccountSummary}
-                      onChange={(e) => setBankAccountSummary(e.target.value)}
-                    />
-                  </FormField>
-                </FormFieldFull>
-                <FormFieldFull>
-                  <FormField label={t("contracts.remarks")}>
-                    <textarea
-                      className={inputClass}
-                      rows={2}
-                      value={remarks}
-                      onChange={(e) => setRemarks(e.target.value)}
-                    />
-                  </FormField>
-                </FormFieldFull>
-              </FormFieldGrid>
             </FormSection>
             {saved ? <p className="text-sm text-success">{t("common.saved")}</p> : null}
           </ContractModalSplit>
@@ -1009,6 +1065,8 @@ function SaleLinesEditor({
 }) {
   const { t } = useI18n();
   const { materialTypes } = useMockStore();
+  const moneyUnits = useMoneyUnits();
+  const priceUnit = moneyUnits.moneyPerTon(t("contracts.unitTon"));
   const options = useMemo(() => {
     const list = materialTypes
       .filter((m) => m.enabled && m.forSale)
@@ -1045,14 +1103,18 @@ function SaleLinesEditor({
           <span className="text-danger"> *</span>
         </span>
         <span>
-          {t("contracts.plannedTons")}
+          {t("contracts.plannedTons")}（{t("contracts.unitTon")}）
           <span className="text-danger"> *</span>
         </span>
         <span>
-          {t("contracts.unitPricePerTon")}
+          {t("contracts.unitPrice")}（{priceUnit}）
           <span className="text-danger"> *</span>
         </span>
-        {showFulfilled ? <span>{t("contracts.fulfilledTons")}</span> : null}
+        {showFulfilled ? (
+          <span>
+            {t("contracts.fulfilledTons")}（{t("contracts.unitTon")}）
+          </span>
+        ) : null}
         <span className="sr-only">{t("common.delete")}</span>
       </div>
       {lines.map((line, idx) => {
@@ -1085,7 +1147,8 @@ function SaleLinesEditor({
               options={options}
               placeholder={t("form.selectPlaceholder")}
             />
-            <InputWithUnit
+            <input
+              className={inputClass}
               type="number"
               required
               min={0}
@@ -1101,7 +1164,6 @@ function SaleLinesEditor({
                 };
                 onChange(next);
               }}
-              unit={t("contracts.unitTon")}
             />
             <input
               className={inputClass}
@@ -1122,11 +1184,12 @@ function SaleLinesEditor({
               }}
             />
             {showFulfilled ? (
-              <InputWithUnit
+              <input
+                className={`${inputClass} is-readonly`}
                 type="text"
                 value={kgToTons(line.fulfilledQty).toFixed(3)}
-                unit={t("contracts.unitTon")}
-                disabled
+                readOnly
+                tabIndex={-1}
               />
             ) : null}
             <button
@@ -1159,17 +1222,25 @@ export function ContractDetailModal({
   open,
   onClose,
   id,
+  readOnly = false,
 }: {
   open: boolean;
   onClose: () => void;
   id: string | null;
+  readOnly?: boolean;
 }) {
   const { purchaseContracts, saleContracts } = useMockStore();
   if (id && saleContracts.some((c) => c.id === id)) {
-    return <SaleContractDetailModal open={open} onClose={onClose} id={id} />;
+    return (
+      <SaleContractDetailModal open={open} onClose={onClose} id={id} readOnly={readOnly} />
+    );
   }
   if (id && purchaseContracts.some((c) => c.id === id)) {
-    return <PurchaseContractDetailModal open={open} onClose={onClose} id={id} />;
+    return (
+      <PurchaseContractDetailModal open={open} onClose={onClose} id={id} readOnly={readOnly} />
+    );
   }
-  return <PurchaseContractDetailModal open={open} onClose={onClose} id={id} />;
+  return (
+    <PurchaseContractDetailModal open={open} onClose={onClose} id={id} readOnly={readOnly} />
+  );
 }

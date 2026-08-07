@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { TableScrollArea, TableSplitScrollArea } from "@/shared/ui/TableScrollArea";
+import { TableScrollArea } from "@/shared/ui/TableScrollArea";
 import { PAGE_SIZE_OPTIONS, TablePagination } from "@/shared/ui/TablePagination";
 import { useI18n } from "@/shared/i18n";
 
@@ -80,65 +80,10 @@ export function DataTable<T>({
 
   const tableClass = "ui-data-table min-w-full border-separate border-spacing-0 text-sm";
 
-  const headerTable = (
+  const table = (
     <table className={tableClass}>
-      <thead>
-        <tr className="border-b border-border bg-chip text-left">
-          {columns.map((col) => (
-            <th key={col.key} className={headClassName(col)}>
-              {col.header}
-            </th>
-          ))}
-        </tr>
-      </thead>
-    </table>
-  );
-
-  const bodyTable = (
-    <table className={tableClass}>
-      <tbody>
-        {pageRows.length === 0 ? (
-          <tr>
-            <td
-              colSpan={columns.length}
-              className="px-4 py-12 text-center text-muted"
-            >
-              {resolvedEmpty}
-            </td>
-          </tr>
-        ) : (
-          pageRows.map((row) => (
-            <tr
-              key={rowKey(row)}
-              className={`border-b border-border/70 last:border-0 ${
-                onRowClick ? "cursor-pointer" : ""
-              }`}
-              onClick={() => onRowClick?.(row)}
-            >
-              {columns.map((col) => (
-                <td
-                  key={col.key}
-                  className={cellClassName(col)}
-                  onClick={
-                    col.stopRowClick
-                      ? (e) => e.stopPropagation()
-                      : undefined
-                  }
-                >
-                  {col.render(row)}
-                </td>
-              ))}
-            </tr>
-          ))
-        )}
-      </tbody>
-    </table>
-  );
-
-  const fullTable = (
-    <table className={tableClass}>
-      <thead>
-        <tr className="border-b border-border bg-chip text-left">
+      <thead className="ui-data-table-thead">
+        <tr className="bg-chip text-left">
           {columns.map((col) => (
             <th key={col.key} className={headClassName(col)}>
               {col.header}
@@ -160,9 +105,7 @@ export function DataTable<T>({
           pageRows.map((row) => (
             <tr
               key={rowKey(row)}
-              className={`border-b border-border/70 last:border-0 ${
-                onRowClick ? "cursor-pointer" : ""
-              }`}
+              className={onRowClick ? "cursor-pointer" : undefined}
               onClick={() => onRowClick?.(row)}
             >
               {columns.map((col) => (
@@ -194,15 +137,12 @@ export function DataTable<T>({
 
   return (
     <div className={rootClass}>
-      {fillHeight ? (
-        <TableSplitScrollArea
-          className="ui-data-table-scroll"
-          header={headerTable}
-          body={bodyTable}
-        />
-      ) : (
-        <TableScrollArea>{fullTable}</TableScrollArea>
-      )}
+      <TableScrollArea
+        className={fillHeight ? "ui-data-table-scroll" : undefined}
+        scrollY={fillHeight}
+      >
+        {table}
+      </TableScrollArea>
       {showPagination ? (
         <TablePagination
           total={rows.length}

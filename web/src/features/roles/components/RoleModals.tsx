@@ -105,10 +105,12 @@ export function RoleDetailModal({
   open,
   onClose,
   id,
+  readOnly = false
 }: {
   open: boolean;
   onClose: () => void;
   id: string | null;
+  readOnly?: boolean;
 }) {
   const { t, locale } = useI18n();
   const { roles, updateRole } = useMockStore();
@@ -128,7 +130,7 @@ export function RoleDetailModal({
   }, [open, row, locale]);
 
   async function handleEnabledChange(next: boolean) {
-    if (next === enabled) return;
+    if (readOnly || next === enabled) return;
     const ok = await confirm(
       roleEnableConfirmMessage(name.trim() || t("roles.unnamed"), next),
     );
@@ -137,6 +139,7 @@ export function RoleDetailModal({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (readOnly) return;
     if (!row) return;
     updateRole(row.id, {
       name,
@@ -159,9 +162,11 @@ export function RoleDetailModal({
             <button type="button" className="ui-btn-secondary" onClick={onClose}>
               {t("common.close")}
             </button>
+            {!readOnly ? (
             <button type="submit" form="role-edit-form" className="ui-btn-primary">
               {t("common.save")}
             </button>
+          ) : null}
           </>
         ) : (
           <button type="button" className="ui-btn-secondary" onClick={onClose}>
@@ -174,16 +179,21 @@ export function RoleDetailModal({
         <p className="text-sm text-muted">{t("common.notFoundHint")}</p>
       ) : (
         <form id="role-edit-form" className="space-y-5" onSubmit={handleSubmit}>
-          <FormField label={t("form.roleName")} required>
+          <fieldset disabled={readOnly} className="min-w-0 space-y-5 border-0 p-0">
+          <FormField label={t("form.roleName")} required={!readOnly}>
             <input
               className={inputClass}
-              required
+              required={!readOnly}
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
           </FormField>
           <FormField label={t("permissions.title")}>
-            <RolePermissionEditor value={access} onChange={setAccess} />
+            <RolePermissionEditor
+              value={access}
+              onChange={setAccess}
+              disabled={readOnly}
+            />
           </FormField>
           <FormField label={t("form.enabledStatus")}>
             <div className="mt-2">
@@ -195,6 +205,7 @@ export function RoleDetailModal({
             </div>
           </FormField>
           {saved ? <p className="text-sm text-success">{t("common.saved")}</p> : null}
+          </fieldset>
         </form>
       )}
     </Modal>

@@ -1,7 +1,17 @@
 import type { User } from "@/entities/types";
 
-export function normalizeEmployeeEmail(email: string) {
-  return email.trim().toLowerCase();
+/** 兼容缺字段/脏数据，避免 toLowerCase 空指针 */
+export function normalizeEmployeeEmail(email: string | null | undefined) {
+  return (email ?? "").trim().toLowerCase();
+}
+
+export function emailsEqual(
+  a: string | null | undefined,
+  b: string | null | undefined,
+) {
+  const left = normalizeEmployeeEmail(a);
+  const right = normalizeEmployeeEmail(b);
+  return Boolean(left) && left === right;
 }
 
 export function isEmployeeEmailTaken(

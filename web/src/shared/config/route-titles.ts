@@ -13,12 +13,12 @@ import type { Metadata } from "next";
 const EXTRA_ROUTE_TITLES: Record<string, MessageKey> = {
   "/customers/categories": "customers.manageCategories",
   "/login": "login.title",
-  "/login/split": "login.title",
   "/register": "register.title",
   "/settings/profile": "settings.profileTitle",
   "/settings/password": "settings.passwordTitle",
   "/receivables": "menu.receivables",
-  "/payables": "menu.payables",
+  "/payables": "menu.receivables",
+  "/settlement-docs": "menu.settlementDocs",
 };
 
 export function titleKeyForPath(pathname: string): MessageKey {
@@ -101,6 +101,21 @@ export function buildDocumentTitleBootScript(): string {
   var appName=dict["app.name"]||"";
   var pageTitle=dict[pageKey]||appName;
   document.title=pageTitle+" · "+appName;
+})();`;
+}
+
+/** 首屏同步 html lang，与字体栈、页签标题一致 */
+export function buildLocaleBootScript(): string {
+  return `(function(){
+  var LOCALE_KEY="${LOCALE_STORAGE_KEY}";
+  var DEF="${DEFAULT_LOCALE}";
+  var LOCALES=${JSON.stringify(LOCALES)};
+  var locale=DEF;
+  try{
+    var stored=localStorage.getItem(LOCALE_KEY);
+    if(stored&&LOCALES.indexOf(stored)!==-1) locale=stored;
+  }catch(e){}
+  document.documentElement.lang=locale;
 })();`;
 }
 

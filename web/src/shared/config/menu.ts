@@ -26,15 +26,14 @@ export interface MenuItem {
   moduleId: ModuleId;
 }
 
-/** 一期演示：登錄後展示全部模塊；後續由管理員配置角色權限再做菜單過濾 */
+/** 一期：側欄按角色權限過濾；接 API 後仍由此開關或遠端配置控制 */
 export const menuItems: MenuItem[] = [
   { href: "/dashboard", labelKey: "menu.dashboard", icon: "house", group: "main", moduleId: "dashboard" },
   { href: "/transactions", labelKey: "menu.transactions", icon: "trace", group: "main", moduleId: "transactions" },
   { href: "/contracts", labelKey: "menu.contracts", icon: "fileText", group: "main", moduleId: "contracts" },
   { href: "/weigh-tickets", labelKey: "menu.weighTickets", icon: "scales", group: "main", moduleId: "weighTickets" },
-  // 应收/应付：后台仍保留数据与路由，菜单暂隐藏（往来由过磅生成，核销在收付款）
-  // { href: "/receivables", labelKey: "menu.receivables", icon: "wallet", group: "main" },
-  // { href: "/payables", labelKey: "menu.payables", icon: "receipt", group: "main" },
+  { href: "/settlement-docs", labelKey: "menu.settlementDocs", icon: "receipt", group: "main", moduleId: "weighTickets" },
+  // 应收/应付目标进度已并入结算单列表（已核销/余额/核销状态）；路由保留兼容跳转
   { href: "/payments", labelKey: "menu.payments", icon: "money", group: "main", moduleId: "payments" },
   { href: "/customers", labelKey: "menu.customers", icon: "users", group: "master", moduleId: "customers" },
   { href: "/material-types", labelKey: "menu.materialTypes", icon: "package", group: "master", moduleId: "materialTypes" },

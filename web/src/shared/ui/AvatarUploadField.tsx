@@ -99,6 +99,7 @@ export function AvatarUploadField({
             {t("settings.avatarRemove")}
           </button>
         ) : null}
+        <p className="ui-avatar-upload-hint">{t("settings.avatarHint")}</p>
       </div>
       <input
         ref={inputRef}

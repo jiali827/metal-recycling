@@ -103,7 +103,15 @@
   --radius-control: var(--radius-control);
   --radius-pill: var(--radius-pill);
   --shadow-card: var(--shadow-card);
-  --font-sans: "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+html:lang(zh-Hans) {
+  --font-sans: "PingFang SC", "Noto Sans SC", "Microsoft YaHei", "Helvetica Neue", sans-serif;
+}
+
+html:lang(zh-Hant) {
+  --font-sans: "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", "Helvetica Neue", sans-serif;
 }
 
 @layer base {
@@ -151,23 +159,36 @@
     box-shadow: var(--shadow-card);
   }
 
-  /* ===== Buttons ===== */
-  .ui-btn-primary {
+  /* ===== Buttons（统一高度 = 新建等主操作按钮，与 --control-height-sm 一致） ===== */
+  .ui-btn-primary,
+  .ui-btn-secondary,
+  .ui-btn-danger {
     display: inline-flex;
-    height: 2.25rem;
+    box-sizing: border-box;
+    height: var(--control-height-sm);
+    min-height: var(--control-height-sm);
     align-items: center;
     justify-content: center;
     border-radius: var(--radius-control);
-    background: var(--primary);
+    border-width: 1px;
+    border-style: solid;
     padding: 0 1rem;
     font-size: 0.875rem;
     font-weight: 500;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+
+  .ui-btn-primary {
+    border-color: var(--primary);
+    background: var(--primary);
     color: #fff;
-    transition: background 0.15s ease, transform 0.1s ease;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
   }
 
   .ui-btn-primary:hover:not(:disabled) {
     background: var(--primary-hover);
+    border-color: var(--primary-hover);
   }
 
   .ui-btn-primary:active:not(:disabled) {
@@ -180,15 +201,9 @@
   }
 
   .ui-btn-secondary {
-    display: inline-flex;
-    height: 2.25rem;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-control);
+    border-color: var(--border);
     background: var(--card);
-    padding: 0 1rem;
-    font-size: 0.875rem;
+    font-weight: 400;
     color: var(--muted);
     transition: background 0.15s ease, color 0.15s ease;
   }
@@ -204,21 +219,15 @@
   }
 
   .ui-btn-danger {
-    display: inline-flex;
-    height: 2.25rem;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-control);
+    border-color: var(--danger);
     background: var(--danger);
-    padding: 0 1rem;
-    font-size: 0.875rem;
-    font-weight: 500;
     color: #fff;
-    transition: background 0.15s ease, transform 0.1s ease;
+    transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
   }
 
   .ui-btn-danger:hover:not(:disabled) {
     background: #b91c1c;
+    border-color: #b91c1c;
   }
 
   .ui-btn-danger:active:not(:disabled) {
@@ -271,6 +280,14 @@
     gap: 1rem;
   }
 
+  /* 浅灰圆角面板：仅包住内容，标题在面板外 */
+  .ui-form-section-body.is-panel {
+    border: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+    border-radius: var(--radius-card);
+    background: color-mix(in srgb, var(--chip) 42%, #ffffff);
+    padding: 1rem 1.125rem 1.125rem;
+  }
+
   .ui-form-readonly {
     margin-top: 0.25rem;
     display: flex;
@@ -284,6 +301,15 @@
     color: var(--foreground);
     white-space: nowrap;
     text-overflow: ellipsis;
+  }
+
+  /** 标签/只读徽章等矮控件：与同排输入、分段控件垂直居中对齐 */
+  .ui-form-value {
+    margin-top: 0.25rem;
+    display: flex;
+    height: var(--control-height-md);
+    width: 100%;
+    align-items: center;
   }
 
   .ui-form-label {
@@ -419,6 +445,7 @@
     margin-top: 0.25rem;
     display: flex;
     align-items: stretch;
+    height: var(--control-height-md);
     width: 100%;
     overflow: hidden;
     border: 1px solid var(--border);
@@ -465,7 +492,7 @@
     margin-top: 0;
     min-width: 0;
     flex: 1;
-    height: var(--control-height-md);
+    height: 100%;
     border: none;
     border-radius: 0;
     background: transparent;
@@ -503,9 +530,10 @@
 
   .ui-segmented {
     margin-top: 0.25rem;
-    display: inline-flex;
+    display: flex;
+    width: 100%;
     max-width: 100%;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 0.25rem;
     padding: 0.25rem;
     border-radius: var(--radius-control);
@@ -532,12 +560,12 @@
   }
 
   .ui-segmented-item {
-    flex: 1 1 auto;
+    flex: 1 1 0;
     min-width: 0;
     height: calc(var(--control-height-md) - 0.5rem);
-    padding: 0 0.875rem;
+    padding: 0 0.5rem;
     border-radius: calc(var(--radius-control) - 2px);
-    font-size: 0.875rem;
+    font-size: 0.8125rem;
     font-weight: 500;
     color: var(--muted);
     white-space: nowrap;
@@ -559,15 +587,19 @@
 
   .ui-segmented.is-sm {
     margin-top: 0;
-    gap: 0.125rem;
-    padding: 0.125rem;
+    width: auto;
+    max-width: none;
+    gap: 0.25rem;
+    padding: 0.2rem;
   }
 
   .ui-segmented.is-sm .ui-segmented-item {
+    flex: 0 0 auto;
+    min-width: auto;
     height: calc(var(--control-height-sm) - 0.25rem);
-    padding: 0 0.5rem;
-    font-size: 0.75rem;
-    line-height: 1;
+    padding: 0 0.75rem;
+    font-size: 0.8125rem;
+    line-height: 1.2;
   }
 
   .ui-segmented-item:disabled {
@@ -629,6 +661,66 @@
 
   .ui-control-trigger[aria-disabled="true"] {
     pointer-events: none;
+  }
+
+  .ui-control-combobox {
+    cursor: text;
+    padding-right: 0.5rem;
+  }
+
+  .ui-control-combobox.is-disabled {
+    background: var(--control-disabled-bg);
+    border-style: dashed;
+    border-color: var(--control-disabled-border);
+    box-shadow: inset 0 1px 1px rgb(15 23 42 / 0.02);
+    cursor: not-allowed;
+  }
+
+  .ui-control-combobox:focus-within,
+  .ui-control-combobox.is-open {
+    border-color: var(--focus-border);
+    box-shadow: var(--focus-ring);
+    background: #fff;
+  }
+
+  .ui-control-combobox-input {
+    min-width: 0;
+    flex: 1;
+    border: none;
+    background: transparent;
+    padding: 0;
+    font: inherit;
+    color: inherit;
+    outline: none;
+    cursor: inherit;
+  }
+
+  .ui-control-combobox-input:disabled {
+    cursor: not-allowed;
+  }
+
+  .ui-control-combobox-input::placeholder {
+    color: var(--control-placeholder-ink);
+  }
+
+  .ui-control-combobox-toggle {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    padding: 0;
+    color: var(--muted);
+    cursor: pointer;
+  }
+
+  .ui-control-combobox-toggle:disabled {
+    cursor: not-allowed;
+  }
+
+  .ui-control-combobox.is-open .ui-control-chevron {
+    transform: rotate(180deg);
   }
 
   .ui-multiselect-trigger {
@@ -738,6 +830,87 @@
   .ui-control-trigger:disabled .ui-control-chevron,
   .ui-control-trigger[aria-disabled="true"] .ui-control-chevron {
     color: var(--control-disabled-ink);
+  }
+
+  /* 控件右侧清空 X（日期 / 下拉 / 输入） */
+  .ui-control-clear {
+    display: inline-flex;
+    width: 0.9375rem;
+    height: 0.9375rem;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 999px;
+    background: rgb(148 163 184 / 0.32);
+    color: #64748b;
+    cursor: pointer;
+    transition:
+      opacity 0.12s ease,
+      background-color 0.15s ease,
+      color 0.15s ease;
+  }
+
+  /* 默认隐藏；悬停或聚焦控件时再显示，减少视觉噪音 */
+  .ui-control-trigger .ui-control-clear,
+  .ui-control-combobox .ui-control-clear {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .ui-control-trigger:hover .ui-control-clear,
+  .ui-control-trigger:focus-within .ui-control-clear,
+  .ui-control-trigger.is-open .ui-control-clear,
+  .ui-control-combobox:hover .ui-control-clear,
+  .ui-control-combobox:focus-within .ui-control-clear,
+  .ui-control-combobox.is-open .ui-control-clear,
+  .ui-input-clearable:hover .ui-control-clear,
+  .ui-input-clearable:focus-within .ui-control-clear {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .ui-control-clear:hover:not(:disabled) {
+    background: rgb(100 116 139 / 0.45);
+    color: #334155;
+  }
+
+  .ui-control-clear:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  .ui-control-suffix {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 0.375rem;
+  }
+
+  /* 可清空文本输入：右侧内置 X */
+  .ui-input-clearable {
+    position: relative;
+    display: block;
+    width: 100%;
+    margin-top: 0.25rem;
+  }
+
+  .ui-input-clearable.is-sm {
+    margin-top: 0;
+  }
+
+  .ui-input-clearable .ui-input {
+    margin-top: 0;
+    width: 100%;
+    padding-right: 2rem;
+  }
+
+  .ui-input-clearable .ui-control-clear {
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    z-index: 1;
+    transform: translateY(-50%);
   }
 
   /* ===== Floating panel (Select / DatePicker / menus) ===== */
@@ -1366,9 +1539,16 @@
     box-shadow: -8px 0 12px -8px rgb(15 23 42 / 0.1);
   }
 
-  /* No horizontal scroll: action column flows with the row (no gap / color patch) */
-  :not(.ui-table-scroll-x) .ui-table-sticky-right {
+  /* 仅当「当前滚动容器」无横向溢出时取消右侧固定，避免祖先 :not() 误伤 */
+  .ui-table-scroll-area:not(.ui-table-scroll-x) tbody .ui-table-sticky-right {
     position: static;
+    min-width: auto;
+    border-left: none;
+    box-shadow: none;
+  }
+
+  .ui-table-scroll-area:not(.ui-table-scroll-x) thead .ui-table-sticky-right {
+    right: auto;
     min-width: auto;
     border-left: none;
     box-shadow: none;
@@ -1376,20 +1556,27 @@
 
   .ui-data-table thead .ui-table-sticky-right,
   .ui-table-hover-soft thead .ui-table-sticky-right {
-    z-index: 2;
+    z-index: 3;
     background: var(--chip);
   }
 
-  :not(.ui-table-scroll-x) .ui-data-table thead .ui-table-sticky-right,
-  :not(.ui-table-scroll-x) .ui-table-hover-soft thead .ui-table-sticky-right {
-    background: inherit;
+  /* Row hover: apply on every cell so sticky action column stays in sync */
+  /* 行分隔线画在 td/th 上：border-separate 时 tr 的 border-b 无效 */
+  .ui-data-table thead th,
+  .ui-data-table .ui-data-table-head {
+    border-bottom: 1px solid var(--border);
   }
 
-  /* Row hover: apply on every cell so sticky action column stays in sync */
   .ui-data-table tbody tr > td,
   .ui-table-hover-soft tbody tr > td {
+    border-bottom: 1px solid var(--border);
     background: var(--card);
     transition: background-color 0.15s ease;
+  }
+
+  .ui-data-table tbody tr:last-child > td,
+  .ui-table-hover-soft tbody tr:last-child > td {
+    border-bottom: none;
   }
 
   .ui-data-table tbody tr:hover > td,
@@ -1416,6 +1603,7 @@
     flex: 1 1 auto;
     flex-direction: column;
     overflow: hidden;
+    padding-bottom: 0.125rem;
   }
 
   .ui-page-scroll {
@@ -1560,12 +1748,21 @@
     z-index: 2;
   }
 
+  /* 表头单元格粘顶（比 thead sticky 兼容更好） */
+  .ui-data-table thead th.ui-data-table-head {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--chip);
+  }
+
   .ui-data-table-head {
     background: var(--chip);
   }
 
-  .ui-data-table thead .ui-table-sticky-right.ui-data-table-head {
+  .ui-data-table thead th.ui-table-sticky-right.ui-data-table-head {
     z-index: 3;
+    right: 0;
   }
 
   /* ===== Table pagination ===== */
@@ -1584,8 +1781,16 @@
   }
 
   .ui-table-pagination-meta {
+    display: flex;
     min-width: 0;
     flex: 1 1 auto;
+    align-items: center;
+    gap: 0.375rem;
+  }
+
+  .ui-table-pagination-meta-sep {
+    color: color-mix(in srgb, var(--muted) 55%, transparent);
+    user-select: none;
   }
 
   .ui-table-pagination-controls {
@@ -1594,6 +1799,69 @@
     align-items: center;
     justify-content: flex-end;
     gap: 0.5rem;
+  }
+
+  .ui-table-pagination-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .ui-table-pagination-indicator {
+    min-width: 4.5rem;
+    text-align: center;
+    font-size: 0.75rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .ui-table-pagination.is-compact {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 0.75rem;
+    border-top: none;
+    background: transparent;
+    padding: 0 0 0.75rem;
+    font-size: 0.75rem;
+    overflow: visible;
+  }
+
+  .ui-table-pagination.is-compact .ui-table-pagination-meta {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .ui-table-pagination.is-compact .ui-table-pagination-controls {
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 0.5rem;
+  }
+
+  .ui-table-pagination.is-compact .ui-table-pagination-size {
+    min-width: 6.5rem;
+    height: auto;
+    min-height: 0;
+  }
+
+  .ui-table-pagination.is-compact .ui-table-pagination-btn {
+    height: var(--control-height-sm);
+    min-width: var(--control-height-sm);
+    padding: 0;
+  }
+
+  .ui-table-pagination.is-compact .ui-table-pagination-indicator {
+    min-width: 4.5rem;
+    padding: 0 0.25rem;
+    font-size: 0.75rem;
+  }
+
+  @media (max-width: 639px) {
+    .ui-table-pagination.is-compact .ui-table-pagination-controls {
+      flex: 1 1 100%;
+      justify-content: flex-end;
+    }
   }
 
   .ui-table-pagination-size {
@@ -1942,38 +2210,16 @@
   }
 
   /* ===== Sidebar permission states ===== */
-  .ui-nav-perm-badge {
-    flex-shrink: 0;
-    border-radius: 999px;
-    background: color-mix(in srgb, var(--brand-soft) 80%, var(--card));
-    color: var(--brand);
-    font-size: 0.625rem;
-    font-weight: 600;
-    line-height: 1;
-    padding: 0.2rem 0.4rem;
-  }
-
-  .ui-nav-perm-badge.is-muted {
-    background: var(--chip);
-    color: var(--muted);
-  }
-
-  .ui-nav-link.is-read:not(.bg-sidebar-active) {
-    color: color-mix(in srgb, var(--foreground) 70%, var(--muted));
-  }
-
   .ui-nav--perm-filtered .ui-nav-link[data-perm-level="none"] {
     display: none;
   }
 
-  .ui-nav--perm-filtered .ui-nav-link[data-perm-level="read"]:not(.bg-sidebar-active) {
-    border: 1px dashed color-mix(in srgb, var(--brand) 22%, var(--border));
-  }
+  /* 只读菜单：不展示角标、不加虚线框，视觉与可写一致；真正限制在页面按钮/详情 */
 
   /* ===== Avatar upload ===== */
   .ui-avatar-upload {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 0.875rem;
     margin-top: 0.25rem;
   }
@@ -2013,10 +2259,19 @@
 
   .ui-avatar-upload-actions {
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 0.375rem 0.875rem;
     min-width: 0;
+    flex: 1;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+
+  .ui-avatar-upload-hint {
+    max-width: 16rem;
+    font-size: 0.75rem;
+    line-height: 1.4;
+    color: var(--muted);
   }
 
   .ui-avatar-upload-action {
@@ -2175,5 +2430,60 @@
 
   .ui-logo-upload-action--muted:hover {
     color: var(--foreground);
+  }
+}
+
+/* ===== Settlement print：只输出单据 ===== */
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* 有结算单据时：隐藏整站壳，只留单据 */
+  body:has(.settlement-print-sheet) * {
+    visibility: hidden !important;
+  }
+
+  body:has(.settlement-print-sheet) .settlement-print-sheet,
+  body:has(.settlement-print-sheet) .settlement-print-sheet * {
+    visibility: visible !important;
+  }
+
+  body:has(.settlement-print-sheet) .settlement-print-sheet {
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 100%;
+    max-width: none !important;
+    margin: 0 !important;
+    color: #000 !important;
+    background: #fff !important;
+  }
+
+  .settlement-print-toolbar {
+    display: none !important;
+  }
+
+  .settlement-print-page {
+    background: #fff !important;
+    margin: 0 !important;
+    min-height: 0 !important;
+  }
+
+  .settlement-print-page > div:last-child {
+    padding: 0 !important;
+  }
+
+  .settlement-print-page .rounded-\[var\(--radius-card\)\] {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
   }
 }

@@ -4,6 +4,12 @@ Next.js App Router + TypeScript + Tailwind。按 **features / entities / data / 
 
 系统级技术架构（现状 + 目标演进）见仓库根目录：[docs/architecture.md](../docs/architecture.md)。
 
+产品规则与接口意图（Mock 阶段补强）：
+
+- [业务规则总表](../docs/prd-supplements/业务规则总表.md)
+- [数据交互与接口需求](../docs/prd-supplements/数据交互与接口需求.md)
+- [Mock 阶段完成检查表](../docs/prd-supplements/Mock阶段完成检查表.md)
+
 ## 启动
 
 ```bash

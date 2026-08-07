@@ -20,6 +20,7 @@ import {
   todayISO,
 } from "@/shared/lib/date";
 import { useI18n } from "@/shared/i18n";
+import { ControlClearButton } from "./ControlClearButton";
 
 interface DateTimePickerProps {
   value: string;
@@ -27,6 +28,8 @@ interface DateTimePickerProps {
   disabled?: boolean;
   size?: "sm" | "md";
   error?: boolean;
+  /** 有值时在右侧显示清空 X，默认开启 */
+  allowClear?: boolean;
   className?: string;
   id?: string;
   "aria-label"?: string;
@@ -77,6 +80,7 @@ export function DateTimePicker({
   disabled,
   size = "md",
   error,
+  allowClear = true,
   className = "",
   id,
   "aria-label": ariaLabel,
@@ -101,7 +105,7 @@ export function DateTimePicker({
   const [panelStyle, setPanelStyle] = useState<CSSProperties>({});
 
   const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const hourColRef = useRef<HTMLDivElement>(null);
   const minuteColRef = useRef<HTMLDivElement>(null);
@@ -266,7 +270,7 @@ export function DateTimePicker({
     triggerRef.current?.focus();
   }
 
-  function onKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
+  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     if (disabled) return;
     if (
       !open &&
@@ -389,7 +393,10 @@ export function DateTimePicker({
         value={value && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(value) ? value.slice(0, 16) : ""}
         onChange={(e) => {
           const raw = e.target.value;
-          if (!raw) return;
+          if (!raw) {
+            onChange("");
+            return;
+          }
           onChange(raw.slice(0, 16));
         }}
         tabIndex={-1}
@@ -397,11 +404,12 @@ export function DateTimePicker({
         className="sr-only"
         disabled={disabled}
       />
-      <button
+      <div
         ref={triggerRef}
-        type="button"
+        role="button"
+        tabIndex={disabled ? -1 : 0}
         id={id}
-        disabled={disabled}
+        aria-disabled={disabled || undefined}
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label={ariaLabel ?? t("form.pickDateTime")}
@@ -414,8 +422,13 @@ export function DateTimePicker({
         <span className={`ui-control-value${value ? "" : " is-placeholder"} tabular-nums`}>
           {display}
         </span>
-        <CalendarBlank size={16} className="shrink-0 text-muted" />
-      </button>
+        <span className="ui-control-suffix">
+          {allowClear && value && !disabled ? (
+            <ControlClearButton onClear={() => onChange("")} />
+          ) : null}
+          <CalendarBlank size={16} className="shrink-0 text-muted" aria-hidden />
+        </span>
+      </div>
       {panel}
     </div>
   );

@@ -1,16 +1,17 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft } from "@phosphor-icons/react";
 import { ContractTracePanel } from "@/features/contracts/components/ContractTracePanel";
 import { ListPageLayout } from "@/shared/layout/ListPageLayout";
 import { PageHeader } from "@/shared/ui/PageHeader";
 import {
   FilterBar,
   FilterField,
-  filterControlClass,
 } from "@/shared/ui/FilterBar";
-import { Select } from "@/shared/ui/CrudUi";
+import {
+  Select,
+  TextInput
+} from "@/shared/ui/CrudUi";
 import { SegmentedControl } from "@/shared/ui/forms/SegmentedControl";
 import { StatusBadge } from "@/shared/ui/StatusBadge";
 import {
@@ -181,19 +182,12 @@ export default function TransactionsPage() {
   if (selectedId) {
     return (
       <ListPageLayout>
-        <div className="shrink-0">
-          <button
-            type="button"
-            className="ui-btn-secondary inline-flex h-9 items-center gap-1.5 px-3 text-sm"
-            onClick={() => setSelectedId(null)}
-          >
-            <ArrowLeft size={16} />
-            {t("transactions.backToList")}
-          </button>
-        </div>
         <div className="ui-page-scroll is-scrollbar-hidden min-h-0 flex-1">
           {selected ? (
-            <ContractTracePanel trace={selected} />
+            <ContractTracePanel
+              trace={selected}
+              onBack={() => setSelectedId(null)}
+            />
           ) : (
             <div className="ui-card flex min-h-[240px] items-center justify-center p-8 text-sm text-muted">
               {t("transactions.contractNotFound")}
@@ -206,9 +200,12 @@ export default function TransactionsPage() {
 
   return (
     <ListPageLayout>
-      <PageHeader title={t("transactions.title")} />
+      <div className="shrink-0">
+        <PageHeader title={t("transactions.title")} />
+      </div>
 
-      <FilterBar>
+      <div className="shrink-0">
+        <FilterBar>
         <FilterField label={t("common.type")}>
           <SegmentedControl
             size="sm"
@@ -220,8 +217,8 @@ export default function TransactionsPage() {
           />
         </FilterField>
         <FilterField label={t("common.keyword")}>
-          <input
-            className={filterControlClass}
+          <TextInput
+            size="sm"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder={t("transactions.keywordPlaceholder")}
@@ -236,22 +233,22 @@ export default function TransactionsPage() {
               { value: "all", label: t("common.all") },
               { value: "draft", label: t("status.draft") },
               { value: "active", label: t("status.active") },
-              { value: "fulfilling", label: t("status.fulfilling") },
               { value: "completed", label: t("status.completed") },
               { value: "closed", label: t("status.closed") },
             ]}
           />
         </FilterField>
-      </FilterBar>
+        </FilterBar>
+      </div>
 
       {filtered.length === 0 ? (
         <div className="ui-card flex min-h-[240px] flex-1 items-center justify-center p-8 text-sm text-muted">
           {t("common.empty")}
         </div>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="min-h-0 flex-1 overflow-hidden">
-            <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="ui-page-scroll is-scrollbar-hidden min-h-0 flex-1">
+            <div className="grid gap-5 pb-2 sm:grid-cols-2 xl:grid-cols-3">
               {pageRows.map((trace) => (
                 <ProjectCard
                   key={trace.contract.id}
@@ -261,16 +258,19 @@ export default function TransactionsPage() {
               ))}
             </div>
           </div>
-          <div className="ui-card mt-4 shrink-0 overflow-hidden">
-            <TablePagination
-              total={filtered.length}
-              page={page}
-              pageSize={pageSize}
-              onPageChange={setPage}
-              onPageSizeChange={setPageSize}
-              pageSizeOptions={CARD_PAGE_SIZE_OPTIONS}
-            />
-          </div>
+          <TablePagination
+            variant="compact"
+            className="mt-4 shrink-0"
+            total={filtered.length}
+            page={page}
+            pageSize={pageSize}
+            onPageChange={setPage}
+            onPageSizeChange={(size) => {
+              setPageSize(size);
+              setPage(1);
+            }}
+            pageSizeOptions={CARD_PAGE_SIZE_OPTIONS}
+          />
         </div>
       )}
     </ListPageLayout>

@@ -14,6 +14,7 @@ import {
   roleIdsEqual,
   userHasEnabledRole,
 } from "@/entities/employee/roles";
+import { emailsEqual } from "@/entities/employee/email";
 import { getActiveMessages } from "@/shared/i18n";
 import { useMockStore } from "@/data/mock/store";
 import {
@@ -107,9 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!ready || !user) return;
 
     const matched = employees.find(
-      (e) =>
-        e.id === user.id ||
-        e.email.toLowerCase() === user.email.toLowerCase(),
+      (e) => e.id === user.id || emailsEqual(e.email, user.email),
     );
 
     if (matched) {
@@ -150,8 +149,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { ok: false, message: m.login.passwordIncorrect };
       }
 
-      const matched = employees.find(
-        (u) => u.email.toLowerCase() === trimmed.toLowerCase(),
+      const matched = employees.find((u) =>
+        emailsEqual(u.email, trimmed),
       );
       if (matched) {
         if (matched.status === "disabled") {
@@ -163,6 +162,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setStoredPassword(matched.email, password);
         persist(matched);
         return { ok: true };
+      }
+
+      /** 仅 demo@ 允许未登记邮箱以管理员身份进入；其它未登记邮箱拒绝 */
+      if (trimmed.toLowerCase() !== DEMO_EMAIL.toLowerCase()) {
+        return { ok: false, message: m.login.passwordIncorrect };
       }
 
       const demoUser = demoSessionUser(trimmed, options?.name);
@@ -200,9 +204,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       persist(next);
 
       const matched = employees.find(
-        (e) =>
-          e.id === user.id ||
-          e.email.toLowerCase() === user.email.toLowerCase(),
+        (e) => e.id === user.id || emailsEqual(e.email, user.email),
       );
       if (matched) {
         const employeePatch: Partial<User> = {};

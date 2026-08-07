@@ -1,23 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import {
+  ArrowLeft,
   ArrowsLeftRight,
+  Eye,
   FileText,
   PencilSimple,
   Plus,
+  Receipt,
   Scales,
-  Trash,
-  UserCircle,
 } from "@phosphor-icons/react";
-import { useConfirm } from "@/shared/ui/ConfirmDialog";
-import { ContractDetailModal } from "@/features/contracts/components/ContractModals";
-import { CustomerDetailModal } from "@/features/customers/components/CustomerModals";
-import { PaymentCreateModal, PaymentDetailModal } from "@/features/payments/components/PaymentModals";
-import {
-  WeighTicketCreateModal,
-  WeighTicketDetailModal,
-} from "@/features/weigh-tickets/components/WeighTicketModals";
+import { PaymentDetailModal } from "@/features/payments/components/PaymentModals";
+import { WeighTicketDetailModal } from "@/features/weigh-tickets/components/WeighTicketModals";
 import { StatusBadge } from "@/shared/ui/StatusBadge";
 import { TableScrollArea } from "@/shared/ui/TableScrollArea";
 import { contractStatusTone } from "@/entities/contract/status";
@@ -25,7 +21,6 @@ import {
   DIRECTION_PURCHASE_COLOR,
   DIRECTION_SALE_COLOR,
 } from "@/shared/lib/direction-colors";
-import { deleteConfirmMessage } from "@/shared/lib/confirm-delete";
 import { formatKg, formatMoney } from "@/shared/lib/format";
 import { formatWeighDateTime } from "@/shared/lib/date";
 import { localizeMiscKind, useI18n } from "@/shared/i18n";
@@ -35,11 +30,12 @@ import {
   ticketStatusLabel,
 } from "@/shared/i18n/labels";
 import { isMiscPayment } from "@/entities/payment/meta";
-import { paymentTicketBxNo } from "@/entities/settlement";
+import { paymentSettlementDocNo } from "@/entities/settlement";
 import { useMockStore } from "@/data/mock/store";
+import { useModulePermission } from "@/shared/config/menu-permissions";
 import type { ContractTrace } from "@/entities/transaction/trace";
 
-type DetailTab = "basic" | "weigh" | "payment";
+type DetailTab = "basic" | "weigh" | "settlement" | "payment";
 
 function formatPaymentMethod(
   method: string,
@@ -68,39 +64,15 @@ function TraceInfoBlock({
   );
 }
 
-function BasicInfoToolbar({
-  onEditContract,
-  onEditCustomer,
-  hasCustomer,
-}: {
-  onEditContract: () => void;
-  onEditCustomer: () => void;
-  hasCustomer: boolean;
-}) {
+function BasicInfoToolbar() {
   const { t } = useI18n();
-  const actionClass =
-    "inline-flex h-8 items-center gap-1 rounded-[var(--radius-control)] px-2 text-xs font-medium text-brand transition hover:bg-brand-soft";
 
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3">
-      <div className="flex items-center gap-2">
-        <FileText size={18} weight="regular" className="shrink-0 text-foreground" />
-        <h3 className="text-sm font-semibold text-foreground">
-          {t("form.sectionBasic")}
-        </h3>
-      </div>
-      <div className="flex flex-wrap items-center gap-1">
-        <button type="button" onClick={onEditContract} className={actionClass}>
-          <PencilSimple size={14} />
-          {t("transactions.contractSection")}
-        </button>
-        {hasCustomer ? (
-          <button type="button" onClick={onEditCustomer} className={actionClass}>
-            <UserCircle size={14} />
-            {t("transactions.customerSection")}
-          </button>
-        ) : null}
-      </div>
+    <div className="flex flex-wrap items-center gap-2">
+      <FileText size={18} weight="regular" className="shrink-0 text-foreground" />
+      <h3 className="text-sm font-semibold text-foreground">
+        {t("form.sectionBasic")}
+      </h3>
     </div>
   );
 }
@@ -117,14 +89,14 @@ function TraceStep({
   active?: boolean;
 }) {
   return (
-    <div className="flex min-w-0 flex-1 flex-col items-center gap-1">
+    <div className="relative z-[1] flex w-14 shrink-0 flex-col items-center gap-1">
       <div
         className={`flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-semibold tabular-nums ${
           done
             ? "bg-brand text-white"
             : active
               ? "border-2 border-brand bg-brand-soft text-brand"
-              : "bg-chip text-muted"
+              : "border border-transparent bg-chip text-muted"
         }`}
       >
         {step}
@@ -227,31 +199,17 @@ function InfoGrid({ children }: { children: ReactNode }) {
   );
 }
 
-function RowActionButtons({
-  onEdit,
-  onDelete,
-}: {
-  onEdit: () => void;
-  onDelete: () => void;
-}) {
+function ViewActionButton({ onView }: { onView: () => void }) {
   const { t } = useI18n();
   return (
-    <div className="flex items-center justify-end gap-1">
+    <div className="flex items-center justify-end">
       <button
         type="button"
-        onClick={onEdit}
+        onClick={onView}
         className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-control)] text-muted transition hover:bg-chip hover:text-brand"
         aria-label={t("common.detail")}
       >
-        <PencilSimple size={14} />
-      </button>
-      <button
-        type="button"
-        onClick={onDelete}
-        className="flex h-7 w-7 items-center justify-center rounded-[var(--radius-control)] text-muted transition hover:bg-red-50 hover:text-danger"
-        aria-label={t("common.delete")}
-      >
-        <Trash size={14} />
+        <Eye size={14} />
       </button>
     </div>
   );
@@ -265,14 +223,24 @@ function EmptyPanel({ text }: { text: string }) {
   );
 }
 
-export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
+const backBtnClass =
+  "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--radius-control)] border border-border bg-white text-muted transition hover:bg-chip hover:text-foreground";
+
+export function ContractTracePanel({
+  trace,
+  onBack,
+}: {
+  trace: ContractTrace;
+  onBack?: () => void;
+}) {
   const { t } = useI18n();
-  const confirm = useConfirm();
+  const router = useRouter();
+  const weighPerm = useModulePermission("weighTickets");
+  const paymentPerm = useModulePermission("payments");
   const {
     purchaseContracts,
     saleContracts,
-    removeWeighTicket,
-    removePayment,
+    weighSettlementDocs,
   } = useMockStore();
 
   const allContracts = useMemo(
@@ -291,36 +259,27 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
 
   const { contract, customer, tickets, settlements, payments, summary } = trace;
 
+  const settlementDocs = useMemo(
+    () =>
+      weighSettlementDocs
+        .filter(
+          (d) => d.contractId === contract.id || d.contractNo === contract.no,
+        )
+        .slice()
+        .sort(
+          (a, b) =>
+            b.docDate.localeCompare(a.docDate) || b.no.localeCompare(a.no),
+        ),
+    [weighSettlementDocs, contract.id, contract.no],
+  );
+
   const [activeTab, setActiveTab] = useState<DetailTab>("basic");
-  const [contractEditOpen, setContractEditOpen] = useState(false);
-  const [customerEditId, setCustomerEditId] = useState<string | null>(null);
-  const [ticketCreateOpen, setTicketCreateOpen] = useState(false);
-  const [ticketEditId, setTicketEditId] = useState<string | null>(null);
-  const [paymentCreateOpen, setPaymentCreateOpen] = useState(false);
-  const [paymentEditId, setPaymentEditId] = useState<string | null>(null);
+  const [ticketViewId, setTicketViewId] = useState<string | null>(null);
+  const [paymentViewId, setPaymentViewId] = useState<string | null>(null);
 
   useEffect(() => {
     setActiveTab("basic");
   }, [contract.id]);
-
-  const ticketPreset = useMemo(
-    () => ({
-      contractNo: contract.no,
-      direction: contract.type,
-      customerName: contract.customerName,
-      saleContractId: contract.type === "sale" ? contract.id : undefined,
-    }),
-    [contract],
-  );
-
-  const paymentPreset = useMemo(
-    () => ({
-      counterparty: contract.customerName,
-      type: contract.type === "sale" ? ("receipt" as const) : ("payment" as const),
-      ticketBxNo: tickets.find((tk) => tk.status === "normal")?.bxNo,
-    }),
-    [contract, tickets],
-  );
 
   const hasWeigh = summary.normalTicketCount > 0;
   const hasPayment = payments.length > 0;
@@ -344,18 +303,18 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
           count: tickets.length,
         },
         {
+          id: "settlement" as const,
+          label: t("transactions.settlementSection"),
+          count: settlementDocs.length,
+        },
+        {
           id: "payment" as const,
           label: t("transactions.paymentSection"),
           count: payments.length,
         },
       ] as const,
-    [t, tickets.length, payments.length],
+    [t, tickets.length, settlementDocs.length, payments.length],
   );
-
-  async function confirmDelete(label: string, action: () => void) {
-    const ok = await confirm(deleteConfirmMessage(label));
-    if (ok) action();
-  }
 
   return (
     <>
@@ -363,19 +322,32 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
         <div className="ui-card overflow-hidden">
           <div className="border-b border-border bg-gradient-to-r from-brand-soft/40 to-card px-4 py-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-base font-semibold tracking-tight text-foreground">
-                  {contract.no}
-                </h2>
-                <StatusBadge tone={contract.type === "purchase" ? "info" : "accent"}>
-                  {contract.type === "purchase" ? t("common.purchase") : t("common.sale")}
-                </StatusBadge>
-                <StatusBadge tone={contractStatusTone(contract.status)}>
-                  {contractStatusLabel[contract.status]}
-                </StatusBadge>
+            <div className="flex min-w-0 items-start gap-2 sm:gap-3">
+              {onBack ? (
+                <button
+                  type="button"
+                  className={backBtnClass}
+                  onClick={onBack}
+                  aria-label={t("transactions.backToList")}
+                  title={t("transactions.backToList")}
+                >
+                  <ArrowLeft size={18} weight="bold" />
+                </button>
+              ) : null}
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-base font-semibold tracking-tight text-foreground">
+                    {contract.no}
+                  </h2>
+                  <StatusBadge tone={contract.type === "purchase" ? "info" : "accent"}>
+                    {contract.type === "purchase" ? t("common.purchase") : t("common.sale")}
+                  </StatusBadge>
+                  <StatusBadge tone={contractStatusTone(contract.status)}>
+                    {contractStatusLabel[contract.status]}
+                  </StatusBadge>
+                </div>
+                <p className="mt-1 text-sm text-muted">{contract.customerName}</p>
               </div>
-              <p className="mt-1 text-sm text-muted">{contract.customerName}</p>
             </div>
             <div className="text-right text-xs text-muted">
               <div>{contract.date}</div>
@@ -385,22 +357,26 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
             </div>
           </div>
 
-          <div className="mt-3 flex items-center gap-2">
-            <TraceStep step={1} label={t("transactions.stepContract")} done />
-            <div className="h-px flex-1 bg-border" />
-            <TraceStep
-              step={2}
-              label={t("transactions.stepWeigh")}
-              done={hasWeigh}
-              active={!hasWeigh}
+          <div className="relative mt-3">
+            <div
+              className="pointer-events-none absolute left-7 right-7 top-3 h-px bg-border"
+              aria-hidden
             />
-            <div className="h-px flex-1 bg-border" />
-            <TraceStep
-              step={3}
-              label={t("transactions.stepPayment")}
-              done={allSettled || hasPayment}
-              active={hasWeigh && !hasPayment}
-            />
+            <div className="relative flex items-start justify-between">
+              <TraceStep step={1} label={t("transactions.stepContract")} done />
+              <TraceStep
+                step={2}
+                label={t("transactions.stepWeigh")}
+                done={hasWeigh}
+                active={!hasWeigh}
+              />
+              <TraceStep
+                step={3}
+                label={t("transactions.stepPayment")}
+                done={allSettled || hasPayment}
+                active={hasWeigh && !hasPayment}
+              />
+            </div>
           </div>
         </div>
 
@@ -467,13 +443,7 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
           {activeTab === "basic" ? (
             <div className="w-full max-w-3xl">
             <TabContentCard
-              toolbar={
-                <BasicInfoToolbar
-                  onEditContract={() => setContractEditOpen(true)}
-                  onEditCustomer={() => setCustomerEditId(customer!.id)}
-                  hasCustomer={Boolean(customer)}
-                />
-              }
+              toolbar={<BasicInfoToolbar />}
             >
               <div className="space-y-5">
                 <TraceInfoBlock title={t("transactions.contractSection")}>
@@ -536,22 +506,26 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
                       <p className="text-sm text-muted">
                         {t("transactions.customerLinkHint")}
                       </p>
-                      <button
-                        type="button"
-                        className="ui-btn-primary mt-4 text-sm"
-                        onClick={() => setContractEditOpen(true)}
-                      >
-                        {t("transactions.customerLinkAction")}
-                      </button>
                     </div>
                   ) : (
                     <InfoGrid>
+                      <InfoCell label={t("customers.customerNo")}>{customer.customerNo}</InfoCell>
                       <InfoCell label={t("common.name")}>{customer.name}</InfoCell>
                       <InfoCell label={t("common.category")}>
                         {customer.category}
                       </InfoCell>
-                      <InfoCell label={t("common.contact")}>
-                        {customer.contact ?? "-"}
+                      <InfoCell label={t("contracts.contactName")}>
+                        {customer.contactName ?? "-"}
+                      </InfoCell>
+                      <InfoCell label={t("customers.phone")}>
+                        {customer.phone ?? "-"}
+                      </InfoCell>
+                      <InfoCell label={t("login.email")}>{customer.email ?? "-"}</InfoCell>
+                      <InfoCell label={t("customers.siteName")}>
+                        {customer.siteName ?? "-"}
+                      </InfoCell>
+                      <InfoCell label={t("customers.address")}>
+                        {customer.address ?? "-"}
                       </InfoCell>
                       <InfoCell label={t("transactions.relatedContractCount")}>
                         {customerContractCount}
@@ -572,7 +546,6 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
                   embedded
                   title={t("transactions.weighSection")}
                   icon={<Scales size={18} weight="regular" className="text-foreground" />}
-                  onAdd={() => setTicketCreateOpen(true)}
                 />
               }
             >
@@ -645,14 +618,108 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
                             </StatusBadge>
                           </td>
                           <td className="ui-table-sticky-right px-4 py-2.5">
-                            <RowActionButtons
-                              onEdit={() => setTicketEditId(ticket.id)}
-                              onDelete={() =>
-                                void confirmDelete(`BX${ticket.bxNo}`, () =>
-                                  removeWeighTicket(ticket.id),
-                                )
-                              }
-                            />
+                            {weighPerm.canView ? (
+                              <ViewActionButton
+                                onView={() => setTicketViewId(ticket.id)}
+                              />
+                            ) : null}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </TableScrollArea>
+              )}
+            </TabContentCard>
+          ) : null}
+
+          {activeTab === "settlement" ? (
+            <TabContentCard
+              flush={settlementDocs.length > 0}
+              toolbar={
+                <TabPanelToolbar
+                  embedded
+                  title={t("transactions.settlementSection")}
+                  icon={<Receipt size={18} weight="regular" className="text-foreground" />}
+                />
+              }
+            >
+              {settlementDocs.length === 0 ? (
+                <div className="p-4">
+                  <EmptyPanel text={t("transactions.noSettlementDocs")} />
+                </div>
+              ) : (
+                <TableScrollArea>
+                  <table className="ui-table-hover-soft min-w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border bg-chip text-left text-xs text-muted">
+                        <th className="px-4 py-2.5 font-semibold">
+                          {t("settlementDocs.colNo")}
+                        </th>
+                        <th className="py-2.5 pr-3 font-semibold">{t("common.type")}</th>
+                        <th className="py-2.5 pr-3 font-semibold">
+                          {t("fields.date")}
+                        </th>
+                        <th className="py-2.5 pr-3 font-semibold">
+                          {t("settlementDocs.colContractNo")}
+                        </th>
+                        <th className="py-2.5 pr-3 font-semibold">
+                          {t("common.status")}
+                        </th>
+                        <th className="py-2.5 pr-3 text-right font-semibold">
+                          {t("settlementDocs.totalNet")}
+                        </th>
+                        <th className="py-2.5 pr-3 text-right font-semibold">
+                          {t("settlementDocs.totalAmount")}
+                        </th>
+                        <th className="ui-table-sticky-right px-4 py-2.5 text-right font-semibold">
+                          {t("common.actions")}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-card">
+                      {settlementDocs.map((doc) => (
+                        <tr
+                          key={doc.id}
+                          className="border-b border-border/50 last:border-0"
+                        >
+                          <td className="px-4 py-2.5 font-medium tabular-nums">
+                            {doc.no}
+                          </td>
+                          <td className="py-2.5 pr-3">
+                            <StatusBadge
+                              tone={doc.kind === "purchase" ? "info" : "accent"}
+                            >
+                              {doc.kind === "purchase"
+                                ? t("settlementDocs.purchaseTitle")
+                                : t("settlementDocs.saleTitle")}
+                            </StatusBadge>
+                          </td>
+                          <td className="py-2.5 pr-3 tabular-nums">{doc.docDate}</td>
+                          <td className="py-2.5 pr-3">{doc.contractNo}</td>
+                          <td className="py-2.5 pr-3">
+                            <StatusBadge
+                              tone={doc.status === "confirmed" ? "success" : "warning"}
+                            >
+                              {doc.status === "confirmed"
+                                ? t("settlementDocs.statusConfirmed")
+                                : t("settlementDocs.statusPending")}
+                            </StatusBadge>
+                          </td>
+                          <td className="py-2.5 pr-3 text-right tabular-nums">
+                            {formatKg(doc.totalNetKg)}
+                          </td>
+                          <td className="py-2.5 pr-3 text-right tabular-nums">
+                            {formatMoney(doc.totalAmount)}
+                          </td>
+                          <td className="ui-table-sticky-right px-4 py-2.5">
+                            {weighPerm.canView ? (
+                              <ViewActionButton
+                                onView={() =>
+                                  router.push(`/settlement-docs/${doc.id}`)
+                                }
+                              />
+                            ) : null}
                           </td>
                         </tr>
                       ))}
@@ -671,7 +738,6 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
                   embedded
                   title={t("transactions.paymentSection")}
                   icon={<ArrowsLeftRight size={18} weight="regular" className="text-foreground" />}
-                  onAdd={() => setPaymentCreateOpen(true)}
                 />
               }
             >
@@ -695,7 +761,7 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
                           {t("payments.colMiscKind")}
                         </th>
                         <th className="py-2.5 pr-3 font-semibold">
-                          {t("form.relatedTicket")}
+                          {t("payments.colSettlementDoc")}
                         </th>
                         <th className="py-2.5 pr-3 font-semibold">{t("form.colMethod")}</th>
                         <th className="py-2.5 pr-3 text-right font-semibold">
@@ -709,7 +775,7 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
                     </thead>
                     <tbody className="bg-card">
                       {payments.map((p) => {
-                        const ticketBx = paymentTicketBxNo(p);
+                        const docNo = paymentSettlementDocNo(p);
                         return (
                           <tr
                             key={p.id}
@@ -740,8 +806,8 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
                               )}
                             </td>
                             <td className="py-2.5 pr-3">
-                              {ticketBx ? (
-                                <span className="font-medium tabular-nums">BX{ticketBx}</span>
+                              {docNo ? (
+                                <span className="font-medium tabular-nums">{docNo}</span>
                               ) : (
                                 <span className="text-muted">-</span>
                               )}
@@ -754,14 +820,11 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
                             </td>
                             <td className="py-2.5 pr-3">{p.counterparty}</td>
                             <td className="ui-table-sticky-right px-4 py-2.5">
-                              <RowActionButtons
-                                onEdit={() => setPaymentEditId(p.id)}
-                                onDelete={() =>
-                                  void confirmDelete(formatMoney(p.amount), () =>
-                                    removePayment(p.id),
-                                  )
-                                }
-                              />
+                              {paymentPerm.canView ? (
+                                <ViewActionButton
+                                  onView={() => setPaymentViewId(p.id)}
+                                />
+                              ) : null}
                             </td>
                           </tr>
                         );
@@ -776,35 +839,17 @@ export function ContractTracePanel({ trace }: { trace: ContractTrace }) {
         </div>
       </div>
 
-      <ContractDetailModal
-        open={contractEditOpen}
-        onClose={() => setContractEditOpen(false)}
-        id={contract.id}
-      />
-      <CustomerDetailModal
-        open={customerEditId !== null}
-        onClose={() => setCustomerEditId(null)}
-        id={customerEditId}
-      />
-      <WeighTicketCreateModal
-        open={ticketCreateOpen}
-        onClose={() => setTicketCreateOpen(false)}
-        preset={ticketPreset}
-      />
       <WeighTicketDetailModal
-        open={ticketEditId !== null}
-        onClose={() => setTicketEditId(null)}
-        id={ticketEditId}
-      />
-      <PaymentCreateModal
-        open={paymentCreateOpen}
-        onClose={() => setPaymentCreateOpen(false)}
-        preset={paymentPreset}
+        open={ticketViewId !== null}
+        onClose={() => setTicketViewId(null)}
+        id={ticketViewId}
+        readOnly
       />
       <PaymentDetailModal
-        open={paymentEditId !== null}
-        onClose={() => setPaymentEditId(null)}
-        id={paymentEditId}
+        open={paymentViewId !== null}
+        onClose={() => setPaymentViewId(null)}
+        id={paymentViewId}
+        readOnly
       />
     </>
   );

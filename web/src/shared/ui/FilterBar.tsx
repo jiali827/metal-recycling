@@ -17,16 +17,19 @@ export function FilterBar({ children }: FilterBarProps) {
 interface FilterFieldProps {
   label: string;
   children: ReactNode;
+  className?: string;
 }
 
-export function FilterField({ label, children }: FilterFieldProps) {
+export function FilterField({ label, children, className }: FilterFieldProps) {
   return (
-    <div className="flex min-w-[140px] flex-col gap-1 text-xs text-muted">
+    <div
+      className={`flex min-w-[140px] flex-col gap-1 text-xs text-muted${className ? ` ${className}` : ""}`}
+    >
       <span>{label}</span>
       {children}
     </div>
   );
 }
 
-/** Shared filter control class — same tokens as .ui-input.is-sm */
+/** Shared filter control class — prefer TextInput size="sm" for clearable filters */
 export const filterControlClass = "ui-input is-sm";

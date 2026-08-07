@@ -1,7 +1,7 @@
 "use client";
 
-import { LoginView } from "@/features/auth/components/LoginView";
+import { LoginSplitView } from "@/features/auth/components/LoginSplitView";
 
 export default function LoginPage() {
-  return <LoginView />;
+  return <LoginSplitView />;
 }

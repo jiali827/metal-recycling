@@ -90,10 +90,12 @@ export function MaterialTypeDetailModal({
   open,
   onClose,
   id,
+  readOnly = false
 }: {
   open: boolean;
   onClose: () => void;
   id: string | null;
+  readOnly?: boolean;
 }) {
   const { t } = useI18n();
   const { materialTypes, updateMaterialType } = useMockStore();
@@ -115,6 +117,7 @@ export function MaterialTypeDetailModal({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (readOnly) return;
     if (!row) return;
     updateMaterialType(row.id, {
       name,
@@ -136,9 +139,11 @@ export function MaterialTypeDetailModal({
             <button type="button" className="ui-btn-secondary" onClick={onClose}>
               {t("common.close")}
             </button>
+            {!readOnly ? (
             <button type="submit" form="material-edit-form" className="ui-btn-primary">
               {t("common.save")}
             </button>
+          ) : null}
           </>
         ) : (
           <button type="button" className="ui-btn-secondary" onClick={onClose}>

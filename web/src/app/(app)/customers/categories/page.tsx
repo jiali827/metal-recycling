@@ -4,17 +4,22 @@ import { useMemo, useState } from "react";
 import { ListPageLayout } from "@/shared/layout/ListPageLayout";
 import { PageHeader } from "@/shared/ui/PageHeader";
 import { DataTable, type Column } from "@/shared/ui/DataTable";
-import { PrimaryButton, RowActions } from "@/shared/ui/CrudUi";
+import {
+  PrimaryButton,
+  RowActions
+} from "@/shared/ui/CrudUi";
 import { useConfirm } from "@/shared/ui/ConfirmDialog";
 import { CustomerCategoryFormModal } from "@/features/customers/components/CustomerCategoryModals";
 import { deleteConfirmMessage } from "@/shared/lib/confirm-delete";
 import { auditColumns, sortByCreatedAtDesc } from "@/shared/lib/list-columns";
 import { useI18n } from "@/shared/i18n";
 import { useMockStore } from "@/data/mock/store";
+import { useModulePermission } from "@/shared/config/menu-permissions";
 import type { CustomerCategory } from "@/entities/types";
 
 export default function CustomerCategoriesPage() {
   const { t } = useI18n();
+  const perm = useModulePermission("customers");
   const confirm = useConfirm();
   const {
     customerCategories,
@@ -89,7 +94,7 @@ export default function CustomerCategoriesPage() {
       render: (r) => (
         <RowActions
           onDetail={() => setEditId(r.id)}
-          onDelete={() => void handleDelete(r)}
+          onDelete={perm.canDelete ? () => void handleDelete(r) : undefined}
         />
       ),
     },
@@ -102,11 +107,11 @@ export default function CustomerCategoriesPage() {
           { label: t("customers.title"), href: "/customers" },
           { label: t("customers.manageCategories") },
         ]}
-        actions={
+        actions={perm.canCreate ? (
           <PrimaryButton onClick={() => setCreateOpen(true)}>
             {t("customers.categoryNew")}
           </PrimaryButton>
-        }
+        ) : null}
       />
       <DataTable fillHeight
         columns={columns}
@@ -135,6 +140,7 @@ export default function CustomerCategoriesPage() {
           usageCount={countCustomersInCategory(editing.name)}
           onSubmit={handleUpdate}
           duplicateError={t("customers.categoryDuplicate")}
+          readOnly={!perm.canEdit}
         />
       ) : null}
     </ListPageLayout>

@@ -10,6 +10,9 @@
 | 关联需求 | [一期项目需求文档](./金属回收管理系统-一期项目需求文档.md) |
 | 关联设计规格 | [SaaS 设计规格](./superpowers/specs/2026-08-05-metal-recycling-saas-design.md) |
 | 前端实现说明 | [web/README.md](../web/README.md) |
+| 业务规则总表（投产口径） | [prd-supplements/业务规则总表.md](./prd-supplements/业务规则总表.md) |
+| 数据交互与接口需求 | [prd-supplements/数据交互与接口需求.md](./prd-supplements/数据交互与接口需求.md) |
+| Mock 阶段优化计划 | [plans/2026-08-06-mock-phase-optimization.md](./superpowers/plans/2026-08-06-mock-phase-optimization.md) |
 
 ---
 
@@ -222,7 +225,7 @@ sequenceDiagram
 | 货物类型 | `/material-types` |
 | 员工 / 角色 | `/employees`、`/roles` |
 | 设置 | `/settings/profile`、`/password`、`/cash` |
-| 登录 / 注册 | `/login`（全幅氛围）；`/login/split`（左图右表单备选）；`/register` 暂重定向至登录 |
+| 登录 / 注册 | `/login`（左图右表单分栏）；`/register` 暂重定向至登录 |
 
 页面级细节见 `需求文档/*.md`。
 

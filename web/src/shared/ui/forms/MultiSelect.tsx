@@ -14,6 +14,7 @@ import { createPortal } from "react-dom";
 import { CaretDown, Check, X } from "@phosphor-icons/react";
 import { useI18n } from "@/shared/i18n";
 import type { SelectOption } from "./Select";
+import { ControlClearButton } from "./ControlClearButton";
 
 interface MultiSelectProps {
   value: string[];
@@ -23,6 +24,8 @@ interface MultiSelectProps {
   disabled?: boolean;
   size?: "sm" | "md";
   error?: boolean;
+  /** 有选中项时在右侧显示清空 X，默认开启 */
+  allowClear?: boolean;
   className?: string;
   "aria-label"?: string;
   id?: string;
@@ -36,6 +39,7 @@ export function MultiSelect({
   disabled,
   size = "md",
   error,
+  allowClear = true,
   className = "",
   "aria-label": ariaLabel,
   id,
@@ -243,7 +247,12 @@ export function MultiSelect({
             ))
           )}
         </span>
-        <CaretDown size={14} className="ui-control-chevron" />
+        <span className="ui-control-suffix">
+          {allowClear && value.length > 0 && !disabled ? (
+            <ControlClearButton onClear={() => onChange([])} />
+          ) : null}
+          <CaretDown size={14} className="ui-control-chevron" aria-hidden />
+        </span>
       </div>
       {panel}
     </div>

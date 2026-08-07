@@ -1,16 +1,19 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeSlash } from "@phosphor-icons/react";
-import { useAuth } from "@/features/auth/provider";
+import { DEMO_EMAIL, useAuth } from "@/features/auth/provider";
+import { emailsEqual } from "@/entities/employee/email";
 import { useI18n } from "@/shared/i18n";
 import type { MessageKey } from "@/shared/i18n/types";
+import { useMockStore } from "@/data/mock/store";
+import { getDefaultAppPathForUser } from "@/shared/config/menu-permissions";
 
 /** 登录页共用：会话恢复、表单状态与提交 */
 export function useLoginPage() {
-  const { login, user, ready, tenant } = useAuth();
+  const { login, logout, user, ready, tenant } = useAuth();
+  const { roles, employees } = useMockStore();
   const { t } = useI18n();
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -20,10 +23,15 @@ export function useLoginPage() {
   const [entered, setEntered] = useState(false);
 
   useEffect(() => {
-    if (ready && user) {
-      router.replace("/dashboard");
+    if (!ready || !user) return;
+    const landing = getDefaultAppPathForUser(user, roles);
+    if (landing === "/login") {
+      logout();
+      setError(t("permissions.noMenuAccess"));
+      return;
     }
-  }, [ready, user, router]);
+    router.replace(landing);
+  }, [ready, user, roles, router, logout, t]);
 
   useEffect(() => {
     const reduce =
@@ -44,7 +52,18 @@ export function useLoginPage() {
       setError(result.message ?? t("login.failed"));
       return;
     }
-    router.push("/dashboard");
+    const trimmed = email.trim().toLowerCase();
+    const matched = employees.find((u) => emailsEqual(u.email, trimmed));
+    const landingUser =
+      matched ??
+      (trimmed === DEMO_EMAIL.toLowerCase()
+        ? { roleIds: ["admin"] as const }
+        : null);
+    if (!landingUser) {
+      setError(t("login.passwordIncorrect"));
+      return;
+    }
+    router.push(getDefaultAppPathForUser(landingUser, roles));
   }
 
   return {
@@ -155,57 +174,3 @@ export function LoginLoadingScreen({ label }: { label: string }) {
     </div>
   );
 }
-
-export type LoginLayoutId = "overlay" | "split";
-
-/** 右上角布局切换：全幅 / 分栏 */
-export function LoginLayoutSwitcher({
-  active,
-  tone = "dark",
-}: {
-  active: LoginLayoutId;
-  tone?: "dark" | "light";
-}) {
-  const { t } = useI18n();
-  const isDark = tone === "dark";
-
-  const shell = isDark
-    ? "border-white/20 bg-black/25 text-white/70 backdrop-blur-sm"
-    : "border-border bg-white/90 text-muted shadow-sm backdrop-blur-sm";
-  const idle = isDark
-    ? "hover:bg-white/10 hover:text-white"
-    : "hover:bg-chip hover:text-foreground";
-  const activeCls = isDark
-    ? "bg-white/20 text-white"
-    : "bg-chip text-foreground";
-
-  const items: { id: LoginLayoutId; href: string; labelKey: MessageKey }[] = [
-    { id: "overlay", href: "/login", labelKey: "login.layoutOverlay" },
-    { id: "split", href: "/login/split", labelKey: "login.layoutSplit" },
-  ];
-
-  return (
-    <div
-      className={`fixed right-4 top-4 z-20 flex items-center gap-0.5 rounded-lg border p-0.5 text-xs font-medium sm:right-6 sm:top-6 ${shell}`}
-      role="navigation"
-      aria-label={t("login.title")}
-    >
-      {items.map((item) => {
-        const selected = item.id === active;
-        return (
-          <Link
-            key={item.id}
-            href={item.href}
-            className={`rounded-md px-2.5 py-1.5 transition ${
-              selected ? activeCls : idle
-            }`}
-            aria-current={selected ? "page" : undefined}
-          >
-            {t(item.labelKey)}
-          </Link>
-        );
-      })}
-    </div>
-  );
-}
-

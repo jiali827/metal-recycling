@@ -3,15 +3,11 @@
 import Image from "next/image";
 import {
   LoginFormFields,
-  LoginLayoutSwitcher,
   LoginLoadingScreen,
   useLoginPage,
 } from "@/features/auth/components/login-shared";
 
-/**
- * 左右分栏登录：左侧实景图 + 品牌文案，右侧浅色底登录表单。
- * 路由：/login/split（不替换默认 /login）
- */
+/** 左右分栏登录：左侧实景图 + 品牌文案，右侧浅色底登录表单（默认登录页） */
 export function LoginSplitView() {
   const {
     t,
@@ -36,8 +32,6 @@ export function LoginSplitView() {
 
   return (
     <div className="relative flex min-h-[100dvh] bg-background">
-      <LoginLayoutSwitcher active="split" tone="light" />
-
       {/* 左侧：图片面板 */}
       <aside className="relative hidden w-[48%] min-w-[360px] max-w-[640px] overflow-hidden lg:block xl:w-[52%]">
         <Image

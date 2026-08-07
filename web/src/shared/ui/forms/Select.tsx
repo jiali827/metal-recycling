@@ -13,6 +13,7 @@ import {
 import { createPortal } from "react-dom";
 import { CaretDown, Check } from "@phosphor-icons/react";
 import { useI18n } from "@/shared/i18n";
+import { ControlClearButton } from "./ControlClearButton";
 
 export interface SelectOption {
   value: string;
@@ -28,6 +29,10 @@ interface SelectProps {
   disabled?: boolean;
   size?: "sm" | "md";
   error?: boolean;
+  /** 有值时在右侧显示清空 X，默认开启 */
+  allowClear?: boolean;
+  /** 清空后的值；未传时优先取 options 中的 "" 或 "all" */
+  clearValue?: string;
   className?: string;
   "aria-label"?: string;
   id?: string;
@@ -41,6 +46,8 @@ export function Select({
   disabled,
   size = "md",
   error,
+  allowClear = true,
+  clearValue: clearValueProp,
   className = "",
   "aria-label": ariaLabel,
   id,
@@ -51,12 +58,20 @@ export function Select({
   const [highlight, setHighlight] = useState(-1);
   const [panelStyle, setPanelStyle] = useState<CSSProperties>({});
   const rootRef = useRef<HTMLDivElement>(null);
-  const triggerRef = useRef<HTMLButtonElement>(null);
+  const triggerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const listboxId = useId();
 
   const selected = options.find((o) => o.value === value);
   const enabledOptions = options.filter((o) => !o.disabled);
+  const clearValue =
+    clearValueProp ??
+    options.find((o) => o.value === "")?.value ??
+    options.find((o) => o.value === "all")?.value ??
+    "";
+  const showClear = Boolean(
+    allowClear && !disabled && value !== clearValue && value !== undefined,
+  );
 
   const updatePosition = useCallback(() => {
     const el = triggerRef.current;
@@ -115,7 +130,7 @@ export function Select({
     triggerRef.current?.focus();
   }
 
-  function onKeyDown(e: KeyboardEvent<HTMLButtonElement>) {
+  function onKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     if (disabled) return;
     if (!open) {
       if (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Enter" || e.key === " ") {
@@ -197,11 +212,12 @@ export function Select({
 
   return (
     <div ref={rootRef} className={`relative ${className}`}>
-      <button
+      <div
         ref={triggerRef}
-        type="button"
+        role="button"
+        tabIndex={disabled ? -1 : 0}
         id={id}
-        disabled={disabled}
+        aria-disabled={disabled || undefined}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? listboxId : undefined}
@@ -217,8 +233,13 @@ export function Select({
         >
           {selected?.label ?? resolvedPlaceholder}
         </span>
-        <CaretDown size={14} className="ui-control-chevron" />
-      </button>
+        <span className="ui-control-suffix">
+          {showClear ? (
+            <ControlClearButton onClear={() => onChange(clearValue)} />
+          ) : null}
+          <CaretDown size={14} className="ui-control-chevron" aria-hidden />
+        </span>
+      </div>
       {panel}
     </div>
   );

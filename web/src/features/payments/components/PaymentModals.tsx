@@ -21,7 +21,7 @@ import { useMoneyUnits } from "@/shared/lib/use-money-units";
 import { defaultTypeForMiscKind, MISC_KINDS } from "@/entities/payment/meta";
 import {
   buildAllocationSummary,
-  paymentTicketBxNo,
+  paymentSettlementDocId,
 } from "@/entities/settlement";
 import {
   localizeAllocationSummary,
@@ -32,8 +32,11 @@ import type {
   ArApItem,
   PaymentCategory,
   PaymentMiscKind,
+  PaymentRecord,
   PaymentType,
 } from "@/entities/types";
+
+type SettlementTargetOption = ArApItem & { lockedType: PaymentType };
 
 function usePaymentFormOptions(t: ReturnType<typeof useI18n>["t"]) {
   return useMemo(
@@ -61,7 +64,40 @@ function usePaymentFormOptions(t: ReturnType<typeof useI18n>["t"]) {
 }
 
 function arApOptionLabel(item: ArApItem) {
-  return `BX${item.ticketBxNo} · ${item.customerName} · ${formatMoney(item.balance)}`;
+  return `${item.settlementDocNo} · ${item.customerName} · ${formatMoney(item.balance)}`;
+}
+
+function collectOpenTargets(
+  receivables: ArApItem[],
+  payables: ArApItem[],
+): SettlementTargetOption[] {
+  const openish = (item: ArApItem) =>
+    item.status === "open" || item.status === "partial";
+  return [
+    ...receivables.filter(openish).map((item) => ({ ...item, lockedType: "receipt" as const })),
+    ...payables.filter(openish).map((item) => ({ ...item, lockedType: "payment" as const })),
+  ];
+}
+
+/** 编辑时：当前余额 = 目标金额 − 其他收付款对该结算单的已核金额 */
+function editableBalanceForTarget(
+  item: ArApItem,
+  payments: PaymentRecord[],
+  excludePaymentId?: string,
+): number {
+  const others = payments
+    .filter(
+      (p) =>
+        p.category === "settlement" &&
+        paymentSettlementDocId(p) === item.settlementDocId &&
+        p.id !== excludePaymentId,
+    )
+    .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  return Math.max(0, item.amount - others);
+}
+
+function isValidSettlementAmount(amount: number, maxBalance: number) {
+  return amount > 0 && amount <= maxBalance + 1e-9;
 }
 
 export function PaymentCreateModal({
@@ -74,14 +110,13 @@ export function PaymentCreateModal({
   onClose: () => void;
   onCreated?: (id: string) => void;
   preset?: {
-    counterparty?: string;
+    settlementDocId?: string;
     type?: PaymentType;
     category?: PaymentCategory;
-    ticketBxNo?: string;
   };
 }) {
   const { t } = useI18n();
-  const { addPayment, customers, receivables, payables } = useMockStore();
+  const { addPayment, receivables, payables } = useMockStore();
   const moneyUnits = useMoneyUnits();
   const { categoryOptions, typeOptions, methodOptions, miscKindOptions } =
     usePaymentFormOptions(t);
@@ -91,38 +126,44 @@ export function PaymentCreateModal({
   const [method, setMethod] = useState("現金");
   const [date, setDate] = useState("");
   const [amount, setAmount] = useState("");
-  const [counterparty, setCounterparty] = useState("");
-  const [ticketBxNo, setTicketBxNo] = useState("");
+  const [settlementDocId, setSettlementDocId] = useState("");
   const [allocationSummary, setAllocationSummary] = useState("");
   const [miscKind, setMiscKind] = useState<PaymentMiscKind>("other_expense");
+  const [counterparty, setCounterparty] = useState("");
 
   const isMisc = category === "misc";
 
-  const openSettlements = useMemo(() => {
-    const list = type === "receipt" ? receivables : payables;
-    return list.filter(
-      (item) => item.status === "open" || item.status === "partial",
-    );
-  }, [type, receivables, payables]);
+  const openTargets = useMemo(
+    () => collectOpenTargets(receivables, payables),
+    [receivables, payables],
+  );
 
   const settlementOptions = useMemo(
     () =>
-      openSettlements.map((item) => ({
-        value: item.ticketBxNo,
+      openTargets.map((item) => ({
+        value: item.settlementDocId,
         label: arApOptionLabel(item),
       })),
-    [openSettlements],
+    [openTargets],
   );
 
-  const selectedSettlement = openSettlements.find(
-    (item) => item.ticketBxNo === ticketBxNo,
+  const selectedSettlement = openTargets.find(
+    (item) => item.settlementDocId === settlementDocId,
   );
+
+  const maxBalance = selectedSettlement?.balance ?? 0;
 
   useEffect(() => {
     if (!open) return;
     const initialCategory = preset?.category ?? "settlement";
     const initialMiscKind: PaymentMiscKind = "other_expense";
+    const presetDocId = preset?.settlementDocId ?? "";
+    const pool = collectOpenTargets(receivables, payables);
+    const presetItem = presetDocId
+      ? pool.find((row) => row.settlementDocId === presetDocId)
+      : undefined;
     const initialType =
+      presetItem?.lockedType ??
       preset?.type ??
       (initialCategory === "misc"
         ? defaultTypeForMiscKind(initialMiscKind)
@@ -135,22 +176,33 @@ export function PaymentCreateModal({
     setAllocationSummary("");
     setMiscKind(initialMiscKind);
 
-    const presetBx = preset?.ticketBxNo ?? "";
-    setTicketBxNo(presetBx);
-    if (initialCategory !== "misc" && presetBx) {
-      const pool = initialType === "receipt" ? receivables : payables;
-      const item = pool.find((row) => row.ticketBxNo === presetBx);
-      setCounterparty(item?.customerName ?? preset?.counterparty ?? "");
-      setAmount(item ? String(item.balance) : "");
+    if (initialCategory !== "misc") {
+      setSettlementDocId(presetItem?.settlementDocId ?? "");
+      setCounterparty(presetItem?.customerName ?? "");
+      setAmount(presetItem ? String(presetItem.balance) : "");
     } else {
-      setCounterparty(preset?.counterparty ?? "");
+      setSettlementDocId("");
+      setCounterparty("");
       setAmount("");
     }
   }, [open, preset, receivables, payables]);
 
+  function applySettlementTarget(docId: string) {
+    setSettlementDocId(docId);
+    if (!docId) {
+      setAmount("");
+      return;
+    }
+    const item = openTargets.find((row) => row.settlementDocId === docId);
+    if (!item) return;
+    setType(item.lockedType);
+    setCounterparty(item.customerName);
+    setAmount(String(item.balance));
+  }
+
   function handleCategoryChange(next: PaymentCategory) {
     setCategory(next);
-    setTicketBxNo("");
+    setSettlementDocId("");
     setAllocationSummary("");
     setAmount("");
     if (next === "misc") {
@@ -160,25 +212,7 @@ export function PaymentCreateModal({
       setCounterparty("");
     } else {
       setType(preset?.type ?? "receipt");
-      setCounterparty(preset?.counterparty ?? "");
-    }
-  }
-
-  function handleTypeChange(next: PaymentType) {
-    setType(next);
-    if (!isMisc) {
-      setTicketBxNo("");
-      setAmount("");
-      if (!preset?.counterparty) setCounterparty("");
-    }
-  }
-
-  function handleTicketChange(bxNo: string) {
-    setTicketBxNo(bxNo);
-    const item = openSettlements.find((row) => row.ticketBxNo === bxNo);
-    if (item) {
-      setCounterparty(item.customerName);
-      setAmount(String(item.balance));
+      setCounterparty("");
     }
   }
 
@@ -191,30 +225,42 @@ export function PaymentCreateModal({
     e.preventDefault();
     if (isMisc) {
       if (!miscKind) return;
-    } else if (!ticketBxNo.trim()) {
-      return;
+    } else {
+      if (!selectedSettlement) return;
+      const payAmount = Number(amount) || 0;
+      if (!isValidSettlementAmount(payAmount, selectedSettlement.balance)) return;
     }
 
     const payAmount = Number(amount) || 0;
     const summary = isMisc
       ? allocationSummary || "-"
       : buildAllocationSummary(
-          ticketBxNo,
+          selectedSettlement!.settlementDocNo,
           payAmount,
-          selectedSettlement?.amount ?? payAmount,
+          selectedSettlement!.amount,
         );
 
     const row = addPayment({
       date,
       category,
-      type,
+      type: isMisc ? type : selectedSettlement!.lockedType,
       method,
       amount: payAmount,
-      counterparty,
+      counterparty: isMisc ? counterparty : selectedSettlement!.customerName,
       allocationSummary: summary,
       ...(isMisc
-        ? { miscKind, ticketBxNo: undefined }
-        : { ticketBxNo, miscKind: undefined }),
+        ? {
+            miscKind,
+            settlementDocId: undefined,
+            settlementDocNo: undefined,
+            contractNo: undefined,
+          }
+        : {
+            settlementDocId: selectedSettlement!.settlementDocId,
+            settlementDocNo: selectedSettlement!.settlementDocNo,
+            contractNo: selectedSettlement!.contractNo,
+            miscKind: undefined,
+          }),
     });
     onCreated?.(row.id);
     onClose();
@@ -247,24 +293,30 @@ export function PaymentCreateModal({
                 options={categoryOptions}
               />
             </FormField>
-            <FormField label={t("common.type")}>
-              <OptionField
-                value={type}
-                onChange={(v) => handleTypeChange(v as PaymentType)}
-                options={typeOptions}
-              />
-            </FormField>
-            <FormField label={t("fields.paymentDateTime")} required>
-              <DateTimePicker value={date} onChange={setDate} />
-            </FormField>
             {isMisc ? (
               <>
-                <FormField label={t("form.miscKind")} required>
-                  <Select
-                    value={miscKind}
-                    onChange={(v) => handleMiscKindChange(v as PaymentMiscKind)}
-                    options={miscKindOptions}
+                <FormField label={t("common.type")}>
+                  <OptionField
+                    value={type}
+                    onChange={(v) => setType(v as PaymentType)}
+                    options={typeOptions}
                   />
+                </FormField>
+                <FormField label={t("form.method")}>
+                  <OptionField value={method} onChange={setMethod} options={methodOptions} />
+                </FormField>
+                <FormField label={t("fields.amount")} required>
+                  <InputWithUnit
+                    type="number"
+                    step="0.01"
+                    required
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    unit={moneyUnits.money}
+                  />
+                </FormField>
+                <FormField label={t("fields.paymentDateTime")} required>
+                  <DateTimePicker value={date} onChange={setDate} />
                 </FormField>
                 <FormField label={t("form.partyMisc")} required>
                   <input
@@ -275,66 +327,81 @@ export function PaymentCreateModal({
                     placeholder={t("form.partyMiscPlaceholder")}
                   />
                 </FormField>
+                <FormField label={t("form.miscKind")} required>
+                  <Select
+                    value={miscKind}
+                    onChange={(v) => handleMiscKindChange(v as PaymentMiscKind)}
+                    options={miscKindOptions}
+                  />
+                </FormField>
               </>
             ) : (
               <>
-                <FormField label={t("form.relatedTicket")} required>
+                <FormField label={t("form.relatedSettlementDoc")} required>
                   <SearchableSelect
-                    value={ticketBxNo}
-                    onChange={handleTicketChange}
+                    value={settlementDocId}
+                    onChange={applySettlementTarget}
                     options={settlementOptions}
                     placeholder={t("form.settleSelectPlaceholder")}
-                    searchPlaceholder={t("form.ticketSearchPlaceholder")}
+                    searchPlaceholder={t("form.selectPlaceholder")}
+                    allowClear
+                    clearValue=""
                   />
                 </FormField>
-                <FormField label={t("form.party")} required>
-                  <SearchableSelect
-                    value={counterparty}
-                    onChange={setCounterparty}
-                    options={customers.map((c) => ({
-                      value: c.name,
-                      label: c.name,
-                    }))}
-                    disabled={Boolean(ticketBxNo)}
+                <FormField label={t("common.type")}>
+                  <div className="ui-form-readonly">
+                    {type === "receipt" ? t("common.receipt") : t("common.payment")}
+                  </div>
+                </FormField>
+                <FormField label={t("form.method")}>
+                  <OptionField value={method} onChange={setMethod} options={methodOptions} />
+                </FormField>
+                <FormField label={t("fields.amount")} required>
+                  <InputWithUnit
+                    type="number"
+                    step="0.01"
+                    min="0.01"
+                    max={selectedSettlement ? maxBalance : undefined}
+                    required
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    unit={moneyUnits.money}
                   />
                 </FormField>
+                <FormField label={t("fields.paymentDateTime")} required>
+                  <DateTimePicker value={date} onChange={setDate} />
+                </FormField>
+                {selectedSettlement ? (
+                  <FormFieldFull>
+                    <p className="rounded-[8px] bg-chip px-3 py-2 text-xs text-muted">
+                      {selectedSettlement.customerName}
+                      {selectedSettlement.contractNo
+                        ? ` · ${selectedSettlement.contractNo}`
+                        : ""}
+                      {" · "}
+                      {t("form.settleBalanceHint", {
+                        balance: formatMoney(selectedSettlement.balance),
+                        amount: formatMoney(selectedSettlement.amount),
+                      })}
+                    </p>
+                  </FormFieldFull>
+                ) : null}
               </>
             )}
-            <FormField label={t("fields.amount")} required>
-              <InputWithUnit
-                type="number"
-                step="0.01"
-                required
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                unit={moneyUnits.money}
-              />
-            </FormField>
-            <FormField label={t("form.method")}>
-              <OptionField value={method} onChange={setMethod} options={methodOptions} />
-            </FormField>
-            {!isMisc && selectedSettlement ? (
-              <FormFieldFull>
-                <p className="rounded-[8px] bg-chip px-3 py-2 text-xs text-muted">
-                  {t("form.settleBalanceHint", {
-                    balance: formatMoney(selectedSettlement.balance),
-                    amount: formatMoney(selectedSettlement.amount),
-                  })}
-                </p>
-              </FormFieldFull>
-            ) : null}
           </FormFieldGrid>
         </FormSection>
         {isMisc ? (
           <FormSection title={t("form.sectionOptional")}>
-            <FormField label={t("form.miscRemark")}>
-              <input
-                className={inputClass}
-                value={allocationSummary}
-                onChange={(e) => setAllocationSummary(e.target.value)}
-                placeholder={t("form.miscRemarkPlaceholder")}
-              />
-            </FormField>
+            <FormFieldFull>
+              <FormField label={t("form.miscRemark")}>
+                <textarea
+                  className={`${inputClass} min-h-[4.5rem] resize-y`}
+                  value={allocationSummary}
+                  onChange={(e) => setAllocationSummary(e.target.value)}
+                  placeholder={t("form.miscRemarkPlaceholder")}
+                />
+              </FormField>
+            </FormFieldFull>
           </FormSection>
         ) : null}
       </form>
@@ -346,13 +413,15 @@ export function PaymentDetailModal({
   open,
   onClose,
   id,
+  readOnly = false,
 }: {
   open: boolean;
   onClose: () => void;
   id: string | null;
+  readOnly?: boolean;
 }) {
   const { t } = useI18n();
-  const { payments, customers, receivables, payables, updatePayment } = useMockStore();
+  const { payments, receivables, payables, updatePayment } = useMockStore();
   const moneyUnits = useMoneyUnits();
   const { categoryOptions, typeOptions, methodOptions, miscKindOptions } =
     usePaymentFormOptions(t);
@@ -363,37 +432,47 @@ export function PaymentDetailModal({
   const [type, setType] = useState<PaymentType>("receipt");
   const [method, setMethod] = useState("現金");
   const [amount, setAmount] = useState("0");
-  const [counterparty, setCounterparty] = useState("");
-  const [ticketBxNo, setTicketBxNo] = useState("");
+  const [settlementDocId, setSettlementDocId] = useState("");
   const [allocationSummary, setAllocationSummary] = useState("");
   const [miscKind, setMiscKind] = useState<PaymentMiscKind>("other_expense");
+  const [counterparty, setCounterparty] = useState("");
   const [saved, setSaved] = useState(false);
 
   const isMisc = category === "misc";
 
   const settlementPool = useMemo(() => {
-    const list = type === "receipt" ? receivables : payables;
-    return list.filter(
-      (item) =>
-        item.status === "open" ||
-        item.status === "partial" ||
-        item.status === "settled" ||
-        item.ticketBxNo === ticketBxNo,
-    );
-  }, [type, receivables, payables, ticketBxNo]);
+    const open = collectOpenTargets(receivables, payables);
+    const currentId = settlementDocId || (row ? paymentSettlementDocId(row) : "");
+    if (!currentId) return open;
+    if (open.some((item) => item.settlementDocId === currentId)) return open;
+
+    const fromAr = receivables.find((item) => item.settlementDocId === currentId);
+    if (fromAr) {
+      return [{ ...fromAr, lockedType: "receipt" as const }, ...open];
+    }
+    const fromAp = payables.find((item) => item.settlementDocId === currentId);
+    if (fromAp) {
+      return [{ ...fromAp, lockedType: "payment" as const }, ...open];
+    }
+    return open;
+  }, [receivables, payables, settlementDocId, row]);
 
   const settlementOptions = useMemo(
     () =>
       settlementPool.map((item) => ({
-        value: item.ticketBxNo,
+        value: item.settlementDocId,
         label: arApOptionLabel(item),
       })),
     [settlementPool],
   );
 
   const selectedSettlement = settlementPool.find(
-    (item) => item.ticketBxNo === ticketBxNo,
+    (item) => item.settlementDocId === settlementDocId,
   );
+
+  const maxBalance = selectedSettlement
+    ? editableBalanceForTarget(selectedSettlement, payments, row?.id)
+    : 0;
 
   useEffect(() => {
     if (!open || !row) return;
@@ -402,8 +481,8 @@ export function PaymentDetailModal({
     setType(row.type);
     setMethod(row.method);
     setAmount(String(row.amount));
+    setSettlementDocId(paymentSettlementDocId(row));
     setCounterparty(row.counterparty);
-    setTicketBxNo(paymentTicketBxNo(row));
     setAllocationSummary(
       row.allocationSummary === "-"
         ? ""
@@ -415,58 +494,74 @@ export function PaymentDetailModal({
     setSaved(false);
   }, [open, row]);
 
+  function applySettlementTarget(docId: string) {
+    setSettlementDocId(docId);
+    if (!docId) {
+      setAmount("");
+      return;
+    }
+    const item = settlementPool.find((r) => r.settlementDocId === docId);
+    if (!item) return;
+    setType(item.lockedType);
+    setCounterparty(item.customerName);
+    const bal = editableBalanceForTarget(item, payments, row?.id);
+    setAmount(String(bal));
+  }
+
   function handleCategoryChange(next: PaymentCategory) {
     setCategory(next);
     if (next === "misc") {
-      setTicketBxNo("");
+      setSettlementDocId("");
       if (!miscKind) setMiscKind("other_expense");
     } else {
       setMiscKind("other_expense");
     }
   }
 
-  function handleTicketChange(bxNo: string) {
-    setTicketBxNo(bxNo);
-    const item = settlementPool.find((r) => r.ticketBxNo === bxNo);
-    if (item) setCounterparty(item.customerName);
-  }
-
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (readOnly) return;
     if (!row) return;
     if (isMisc) {
       if (!miscKind) return;
-    } else if (!ticketBxNo.trim()) {
-      return;
+    } else {
+      if (!selectedSettlement) return;
+      const payAmount = Number(amount) || 0;
+      if (!isValidSettlementAmount(payAmount, maxBalance)) return;
     }
 
     const payAmount = Number(amount) || 0;
     const summary = isMisc
       ? allocationSummary || "-"
       : buildAllocationSummary(
-          ticketBxNo,
+          selectedSettlement!.settlementDocNo,
           payAmount,
-          selectedSettlement?.amount ?? payAmount,
+          selectedSettlement!.amount,
         );
 
     updatePayment(row.id, {
       category,
       date,
-      type,
+      type: isMisc ? type : selectedSettlement!.lockedType,
       method,
       amount: payAmount,
-      counterparty,
+      counterparty: isMisc ? counterparty : selectedSettlement!.customerName,
       allocationSummary: summary,
       ...(isMisc
-        ? { miscKind, ticketBxNo: undefined }
-        : { ticketBxNo, miscKind: undefined }),
+        ? {
+            miscKind,
+            settlementDocId: undefined,
+            settlementDocNo: undefined,
+            contractNo: undefined,
+          }
+        : {
+            settlementDocId: selectedSettlement!.settlementDocId,
+            settlementDocNo: selectedSettlement!.settlementDocNo,
+            contractNo: selectedSettlement!.contractNo,
+            miscKind: undefined,
+          }),
     });
     setSaved(true);
-  }
-
-  const partyOptions = customers.map((c) => ({ value: c.name, label: c.name }));
-  if (counterparty && !customers.some((c) => c.name === counterparty)) {
-    partyOptions.push({ value: counterparty, label: counterparty });
   }
 
   return (
@@ -481,9 +576,11 @@ export function PaymentDetailModal({
             <button type="button" className="ui-btn-secondary" onClick={onClose}>
               {t("common.close")}
             </button>
-            <button type="submit" form="payment-edit-form" className="ui-btn-primary">
-              {t("common.save")}
-            </button>
+            {!readOnly ? (
+              <button type="submit" form="payment-edit-form" className="ui-btn-primary">
+                {t("common.save")}
+              </button>
+            ) : null}
           </>
         ) : (
           <button type="button" className="ui-btn-secondary" onClick={onClose}>
@@ -503,26 +600,40 @@ export function PaymentDetailModal({
                   value={category}
                   onChange={(v) => handleCategoryChange(v as PaymentCategory)}
                   options={categoryOptions}
+                  disabled={readOnly}
                 />
-              </FormField>
-              <FormField label={t("common.type")}>
-                <OptionField
-                  value={type}
-                  onChange={(v) => setType(v as PaymentType)}
-                  options={typeOptions}
-                />
-              </FormField>
-              <FormField label={t("fields.paymentDateTime")} required>
-                <DateTimePicker value={date} onChange={setDate} />
               </FormField>
               {isMisc ? (
                 <>
-                  <FormField label={t("form.miscKind")} required>
-                    <Select
-                      value={miscKind}
-                      onChange={(v) => setMiscKind(v as PaymentMiscKind)}
-                      options={miscKindOptions}
+                  <FormField label={t("common.type")}>
+                    <OptionField
+                      value={type}
+                      onChange={(v) => setType(v as PaymentType)}
+                      options={typeOptions}
+                      disabled={readOnly}
                     />
+                  </FormField>
+                  <FormField label={t("form.method")}>
+                    <OptionField
+                      value={method}
+                      onChange={setMethod}
+                      options={methodOptions}
+                      disabled={readOnly}
+                    />
+                  </FormField>
+                  <FormField label={t("fields.amount")} required>
+                    <InputWithUnit
+                      type="number"
+                      step="0.01"
+                      required
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      unit={moneyUnits.money}
+                      disabled={readOnly}
+                    />
+                  </FormField>
+                  <FormField label={t("fields.paymentDateTime")} required>
+                    <DateTimePicker value={date} onChange={setDate} disabled={readOnly} />
                   </FormField>
                   <FormField label={t("form.partyMisc")} required>
                     <input
@@ -530,54 +641,95 @@ export function PaymentDetailModal({
                       required
                       value={counterparty}
                       onChange={(e) => setCounterparty(e.target.value)}
+                      readOnly={readOnly}
+                      disabled={readOnly}
+                    />
+                  </FormField>
+                  <FormField label={t("form.miscKind")} required>
+                    <Select
+                      value={miscKind}
+                      onChange={(v) => setMiscKind(v as PaymentMiscKind)}
+                      options={miscKindOptions}
+                      disabled={readOnly}
                     />
                   </FormField>
                 </>
               ) : (
                 <>
-                  <FormField label={t("form.relatedTicket")} required>
+                  <FormField label={t("form.relatedSettlementDoc")} required>
                     <SearchableSelect
-                      value={ticketBxNo}
-                      onChange={handleTicketChange}
+                      value={settlementDocId}
+                      onChange={applySettlementTarget}
                       options={settlementOptions}
                       placeholder={t("form.settleSelectPlaceholder")}
-                      searchPlaceholder={t("form.ticketSearchPlaceholder")}
+                      searchPlaceholder={t("form.selectPlaceholder")}
+                      allowClear
+                      clearValue=""
+                      disabled={readOnly}
                     />
                   </FormField>
-                  <FormField label={t("form.party")} required>
-                    <SearchableSelect
-                      value={counterparty}
-                      onChange={setCounterparty}
-                      options={partyOptions}
-                      disabled={Boolean(ticketBxNo)}
+                  <FormField label={t("common.type")}>
+                    <div className="ui-form-readonly">
+                      {type === "receipt" ? t("common.receipt") : t("common.payment")}
+                    </div>
+                  </FormField>
+                  <FormField label={t("form.method")}>
+                    <OptionField
+                      value={method}
+                      onChange={setMethod}
+                      options={methodOptions}
+                      disabled={readOnly}
                     />
                   </FormField>
+                  <FormField label={t("fields.amount")} required>
+                    <InputWithUnit
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      max={selectedSettlement ? maxBalance : undefined}
+                      required
+                      value={amount}
+                      onChange={(e) => setAmount(e.target.value)}
+                      unit={moneyUnits.money}
+                      disabled={readOnly}
+                    />
+                  </FormField>
+                  <FormField label={t("fields.paymentDateTime")} required>
+                    <DateTimePicker value={date} onChange={setDate} disabled={readOnly} />
+                  </FormField>
+                  {selectedSettlement ? (
+                    <FormFieldFull>
+                      <p className="rounded-[8px] bg-chip px-3 py-2 text-xs text-muted">
+                        {selectedSettlement.customerName}
+                        {selectedSettlement.contractNo
+                          ? ` · ${selectedSettlement.contractNo}`
+                          : ""}
+                        {" · "}
+                        {t("form.settleBalanceHint", {
+                          balance: formatMoney(maxBalance),
+                          amount: formatMoney(selectedSettlement.amount),
+                        })}
+                      </p>
+                    </FormFieldFull>
+                  ) : null}
                 </>
               )}
-              <FormField label={t("fields.amount")} required>
-                <InputWithUnit
-                  type="number"
-                  step="0.01"
-                  required
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  unit={moneyUnits.money}
-                />
-              </FormField>
-              <FormField label={t("form.method")}>
-                <OptionField value={method} onChange={setMethod} options={methodOptions} />
-              </FormField>
             </FormFieldGrid>
           </FormSection>
           {isMisc ? (
             <FormSection title={t("form.sectionOptional")}>
-              <FormField label={t("form.miscRemark")}>
-                <input
-                  className={inputClass}
-                  value={allocationSummary}
-                  onChange={(e) => setAllocationSummary(e.target.value)}
-                />
-              </FormField>
+              <FormFieldFull>
+                <FormField label={t("form.miscRemark")}>
+                  <textarea
+                    className={`${inputClass} min-h-[4.5rem] resize-y`}
+                    value={allocationSummary}
+                    onChange={(e) => setAllocationSummary(e.target.value)}
+                    placeholder={t("form.miscRemarkPlaceholder")}
+                    readOnly={readOnly}
+                    disabled={readOnly}
+                  />
+                </FormField>
+              </FormFieldFull>
             </FormSection>
           ) : null}
           {saved ? <p className="text-sm text-success">{t("common.saved")}</p> : null}

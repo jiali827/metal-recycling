@@ -6,27 +6,37 @@ import type {
 } from "@/entities/types";
 import { stampOnUpdate } from "@/shared/lib/timestamps";
 
-/** 从核销摘要中解析 BX 单号（兼容「核销 BX02513」「部分核销 BX02474」） */
+/** @deprecated 兼容旧核销摘要中的 BX；新流程以 settlementDocId 为准 */
 export function extractBxNoFromAllocation(summary: string | undefined): string {
   if (!summary || summary === "-") return "";
   const match = summary.match(/BX\s*([0-9A-Za-z-]+)/i);
   return match?.[1] ?? "";
 }
 
+export function paymentSettlementDocId(payment: PaymentRecord): string {
+  return payment.settlementDocId?.trim() || "";
+}
+
+export function paymentSettlementDocNo(payment: PaymentRecord): string {
+  return payment.settlementDocNo?.trim() || "";
+}
+
+/** @deprecated 旧磅单核销字段；保留给迁移期摘要解析 */
 export function paymentTicketBxNo(payment: PaymentRecord): string {
-  return payment.ticketBxNo || extractBxNoFromAllocation(payment.allocationSummary);
+  const legacy = (payment as PaymentRecord & { ticketBxNo?: string }).ticketBxNo;
+  return legacy || extractBxNoFromAllocation(payment.allocationSummary);
 }
 
 export function buildAllocationSummary(
-  bxNo: string,
+  settlementDocNo: string,
   payAmount: number,
   arApAmount: number,
 ): string {
-  if (!bxNo) return "-";
+  if (!settlementDocNo) return "-";
   if (payAmount > 0 && payAmount < arApAmount) {
-    return `部分核銷 BX${bxNo}`;
+    return `部分核销 ${settlementDocNo}`;
   }
-  return `核銷 BX${bxNo}`;
+  return `核销 ${settlementDocNo}`;
 }
 
 export function settlementStatusFromAmounts(
@@ -42,19 +52,19 @@ export function settlementStatusFromAmounts(
 
 /**
  * 按收付款合计回写往来已核销 / 余额 / 状态。
- * receipt → 应收；payment → 应付。
+ * receipt → 应收；payment → 应付。按 settlementDocId 匹配。
  */
 export function syncArApFromPayments(
   items: ArApItem[],
   payments: PaymentRecord[],
-  bxNos: string[],
+  settlementDocIds: string[],
   paymentType: PaymentType,
 ): ArApItem[] {
-  const targets = new Set(bxNos.map((b) => b.trim()).filter(Boolean));
+  const targets = new Set(settlementDocIds.map((b) => b.trim()).filter(Boolean));
   if (targets.size === 0) return items;
 
   return items.map((item) => {
-    if (!targets.has(item.ticketBxNo)) return item;
+    if (!targets.has(item.settlementDocId)) return item;
     if (item.status === "void") return item;
 
     const settledRaw = payments
@@ -62,7 +72,7 @@ export function syncArApFromPayments(
         (p) =>
           p.category === "settlement" &&
           p.type === paymentType &&
-          paymentTicketBxNo(p) === item.ticketBxNo,
+          paymentSettlementDocId(p) === item.settlementDocId,
       )
       .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
 
@@ -82,6 +92,21 @@ export function syncArApFromPayments(
   });
 }
 
-export function paymentMatchesTicket(payment: PaymentRecord, bxNo: string): boolean {
-  return paymentTicketBxNo(payment) === bxNo;
+export function paymentMatchesSettlementDoc(
+  payment: PaymentRecord,
+  settlementDocId: string,
+): boolean {
+  return paymentSettlementDocId(payment) === settlementDocId;
+}
+
+/** 某结算目标是否已有往来核销收付款 */
+export function hasSettlementPayments(
+  payments: PaymentRecord[],
+  settlementDocId: string,
+): boolean {
+  return payments.some(
+    (p) =>
+      p.category === "settlement" &&
+      paymentSettlementDocId(p) === settlementDocId,
+  );
 }
