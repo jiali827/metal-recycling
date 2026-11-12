@@ -20,7 +20,7 @@ import {
 } from "./types";
 import { translate } from "./translate";
 
-type I18nContextValue = {
+export type I18nContextValue = {
   locale: Locale;
   setLocale: (locale: Locale) => void;
   t: (key: MessageKey, vars?: Vars) => string;

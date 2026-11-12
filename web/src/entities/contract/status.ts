@@ -10,6 +10,7 @@ export const CONTRACT_STATUS_TONE: Record<string, StatusTone> = {
   active: "info",
   completed: "success",
   closed: "default",
+  void: "danger",
   // 兼容历史值展示
   fulfilling: "warning",
   expired: "danger",
@@ -41,21 +42,22 @@ export function saleFulfillmentTone(phase: SaleFulfillmentPhase): StatusTone {
 }
 
 /** 历史种子/本地数据：把已拆出的自动态映射回手工状态 */
-export function normalizePurchaseStatus(status: string): "draft" | "active" | "closed" {
+export function normalizePurchaseStatus(status: string): "draft" | "active" | "closed" | "void" {
   if (status === "expired") return "active";
-  if (status === "draft" || status === "active" || status === "closed") return status;
+  if (status === "draft" || status === "active" || status === "closed" || status === "void") return status;
   return "active";
 }
 
 export function normalizeSaleStatus(
   status: string,
-): "draft" | "active" | "completed" | "closed" {
+): "draft" | "active" | "completed" | "closed" | "void" {
   if (status === "fulfilling") return "active";
   if (
     status === "draft" ||
     status === "active" ||
     status === "completed" ||
-    status === "closed"
+    status === "closed" ||
+    status === "void"
   ) {
     return status;
   }

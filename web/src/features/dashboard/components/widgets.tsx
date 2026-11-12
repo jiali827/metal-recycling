@@ -211,6 +211,7 @@ export function CashGlance({
   paid,
   miscIncome,
   miscExpense,
+  salaryExpense,
   replayKey,
 }: {
   cashBalance: number;
@@ -218,6 +219,7 @@ export function CashGlance({
   paid: number;
   miscIncome: number;
   miscExpense: number;
+  salaryExpense: number;
   replayKey: string;
 }) {
   const { t } = useI18n();
@@ -288,6 +290,21 @@ export function CashGlance({
             </div>
           </div>
         ))}
+      </div>
+
+      <div
+        className="dash-cash-row flex items-center justify-between gap-3 border-t border-border px-3 py-3"
+        style={{ ["--dash-delay" as string]: "160ms" }}
+      >
+        <div className="flex min-w-0 items-center gap-1.5 text-[11px] text-muted">
+          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] bg-violet-50 text-accent">
+            <ArrowDownLeft size={14} weight="duotone" />
+          </span>
+          <span className="truncate">{t("dashboard.salaryExpense")}</span>
+        </div>
+        <div className="shrink-0 text-lg font-semibold tabular-nums tracking-tight text-foreground">
+          {formatMoney(salaryExpense)}
+        </div>
       </div>
     </div>
   );

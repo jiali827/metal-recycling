@@ -12,6 +12,7 @@ export type ModuleId =
   | "customers"
   | "materialTypes"
   | "projectTypes"
+  | "miscCategories"
   | "employees"
   | "roles"
   | "settings";
@@ -39,6 +40,7 @@ export interface PermissionModuleDef {
     | "menu.customers"
     | "menu.materialTypes"
     | "menu.projectTypes"
+    | "menu.miscCategories"
     | "menu.employees"
     | "menu.roles"
     | "menu.settings";
@@ -100,6 +102,13 @@ export const PERMISSION_MODULES: readonly PermissionModuleDef[] = [
     group: "master",
     menuHref: "/project-types",
     menuLabelKey: "menu.projectTypes",
+    actions: ["view", "create", "edit", "delete"],
+  },
+  {
+    id: "miscCategories",
+    group: "master",
+    menuHref: "/misc-categories",
+    menuLabelKey: "menu.miscCategories",
     actions: ["view", "create", "edit", "delete"],
   },
   {
@@ -225,6 +234,10 @@ export const BUILTIN_ROLE_ACCESS: Record<RoleId, RoleAccessMap> = {
       menu: "write",
       buttons: ["view", "create", "edit", "delete"],
     },
+    miscCategories: {
+      menu: "write",
+      buttons: ["view", "create", "edit", "delete"],
+    },
     settings: { menu: "write", buttons: ["view", "edit"] },
   }),
   boss: defineAccess({
@@ -236,6 +249,7 @@ export const BUILTIN_ROLE_ACCESS: Record<RoleId, RoleAccessMap> = {
     customers: { menu: "read", buttons: ["view"] },
     materialTypes: { menu: "read", buttons: ["view"] },
     projectTypes: { menu: "read", buttons: ["view"] },
+    miscCategories: { menu: "read", buttons: ["view"] },
     employees: { menu: "read", buttons: ["view"] },
     roles: { menu: "read", buttons: ["view"] },
     settings: { menu: "read", buttons: ["view"] },

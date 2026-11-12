@@ -14,6 +14,7 @@ import {
   customers as seedCustomers,
   materialTypes as seedMaterials,
   projectTypes as seedProjectTypes,
+  paymentMiscCategories as seedPaymentMiscCategories,
   payables as seedPayables,
   payments as seedPayments,
   purchaseContracts as seedPurchaseContracts,
@@ -29,8 +30,10 @@ import type {
   ArApItem,
   Customer,
   CustomerCategory,
+  CorrectionAuditEvent,
   MaterialType,
   PaymentRecord,
+  PaymentMiscCategory,
   ProjectType,
   PurchaseContract,
   RoleDef,
@@ -40,6 +43,13 @@ import type {
   WeighSettlementDoc,
   WeighTicket,
 } from "@/entities/types";
+import {
+  applyCorrection,
+  buildCorrectionImpact,
+  type CorrectionTarget,
+  type CorrectionSource,
+  type CorrectionImpact,
+} from "@/entities/correction/reverse";
 import { recomputeSaleContractFulfillment } from "@/entities/contract/summaries";
 import { normalizePurchaseStatus, normalizeSaleStatus } from "@/entities/contract/status";
 import { stampOnCreate, stampOnUpdate } from "@/shared/lib/timestamps";
@@ -51,6 +61,9 @@ import {
   syncArApFromPayments,
 } from "@/entities/settlement";
 import { nowLocalDateTime } from "@/shared/lib/date";
+import { confirmContractStatus, confirmPaymentStatus, confirmTicketStatus } from "@/entities/confirmation/status";
+import { ensurePaymentNos, nextPaymentNo } from "@/entities/payment/no";
+import { nextCorrectionBatchNo } from "@/entities/correction/batch";
 
 type CreateInput<T extends { id: string; createdAt: string; updatedAt: string }> = Omit<
   T,
@@ -87,15 +100,18 @@ interface MockStoreValue {
   updateTenant: (patch: Partial<Tenant>) => void;
   purchaseContracts: PurchaseContract[];
   addPurchaseContract: (input: CreateInput<PurchaseContract>) => PurchaseContract;
-  updatePurchaseContract: (id: string, patch: Partial<PurchaseContract>) => void;
+  updatePurchaseContract: (id: string, patch: Partial<PurchaseContract>, opts?: { allowNonDraft?: boolean }) => void;
+  confirmPurchaseContract: (id: string, opts?: { confirmedBy?: string }) => boolean;
   removePurchaseContract: (id: string) => void;
   saleContracts: SaleContract[];
   addSaleContract: (input: CreateInput<SaleContract>) => SaleContract;
-  updateSaleContract: (id: string, patch: Partial<SaleContract>) => void;
+  updateSaleContract: (id: string, patch: Partial<SaleContract>, opts?: { allowNonDraft?: boolean }) => void;
+  confirmSaleContract: (id: string, opts?: { confirmedBy?: string }) => boolean;
   removeSaleContract: (id: string) => boolean;
   weighTickets: WeighTicket[];
   addWeighTicket: (input: CreateInput<WeighTicket>) => WeighTicket;
   updateWeighTicket: (id: string, patch: Partial<WeighTicket>) => void;
+  confirmWeighTicket: (id: string, opts?: { confirmedBy?: string }) => boolean;
   removeWeighTicket: (id: string) => void;
   weighSettlementDocs: WeighSettlementDoc[];
   addWeighSettlementDoc: (input: CreateInput<WeighSettlementDoc>) => WeighSettlementDoc;
@@ -117,6 +133,7 @@ interface MockStoreValue {
   payments: PaymentRecord[];
   addPayment: (input: CreateInput<PaymentRecord>) => PaymentRecord;
   updatePayment: (id: string, patch: Partial<PaymentRecord>) => void;
+  confirmPayment: (id: string, opts?: { confirmedBy?: string }) => boolean;
   removePayment: (id: string) => void;
   customers: Customer[];
   addCustomer: (input: CreateInput<Customer>) => Customer;
@@ -135,6 +152,10 @@ interface MockStoreValue {
   addProjectType: (input: CreateInput<ProjectType>) => ProjectType;
   updateProjectType: (id: string, patch: Partial<ProjectType>) => void;
   removeProjectType: (id: string) => void;
+  paymentMiscCategories: PaymentMiscCategory[];
+  addPaymentMiscCategory: (input: CreateInput<PaymentMiscCategory>) => PaymentMiscCategory;
+  updatePaymentMiscCategory: (id: string, patch: Partial<PaymentMiscCategory>) => void;
+  removePaymentMiscCategory: (id: string) => void;
   employees: User[];
   addEmployee: (input: CreateInput<User>) => User;
   updateEmployee: (id: string, patch: Partial<User>) => void;
@@ -143,6 +164,9 @@ interface MockStoreValue {
   addRole: (input: CreateInput<RoleDef> & { id?: string }) => RoleDef;
   updateRole: (id: string, patch: Partial<RoleDef>) => void;
   removeRole: (id: string) => void;
+  correctionAuditEvents: CorrectionAuditEvent[];
+  previewCorrection: (target: CorrectionTarget) => CorrectionImpact;
+  forceCorrection: (target: CorrectionTarget, reason: string, actorName?: string) => CorrectionImpact;
 }
 
 const MockStoreContext = createContext<MockStoreValue | null>(null);
@@ -235,13 +259,19 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
   const [weighSettlementDocs, setWeighSettlementDocs] = useState(seedWeighSettlementDocs);
   const [receivables, setReceivables] = useState(seedReceivables);
   const [payables, setPayables] = useState(seedPayables);
-  const [payments, setPayments] = useState(seedPayments);
+  const [payments, setPayments] = useState<PaymentRecord[]>(() =>
+    ensurePaymentNos(seedPayments.map((row) => ({ ...row, status: row.status ?? "confirmed" }))),
+  );
   const [customers, setCustomers] = useState(seedCustomers);
   const [customerCategories, setCustomerCategories] = useState(seedCustomerCategories);
   const [materialTypes, setMaterialTypes] = useState(seedMaterials);
   const [projectTypes, setProjectTypes] = useState(seedProjectTypes);
+  const [paymentMiscCategories, setPaymentMiscCategories] = useState(
+    seedPaymentMiscCategories,
+  );
   const [employees, setEmployees] = useState(seedUsers);
   const [roles, setRoles] = useState(seedRoles);
+  const [correctionAuditEvents, setCorrectionAuditEvents] = useState<CorrectionAuditEvent[]>([]);
 
   useEffect(() => {
     setTenant(readStoredTenant());
@@ -277,10 +307,10 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     setPurchaseContracts((list) => [row, ...list]);
     return row;
   }, []);
-  const updatePurchaseContract = useCallback((id: string, patch: Partial<PurchaseContract>) => {
+  const updatePurchaseContract = useCallback((id: string, patch: Partial<PurchaseContract>, opts?: { allowNonDraft?: boolean }) => {
     setPurchaseContracts((list) =>
       list.map((r) =>
-        r.id === id
+        r.id === id && (r.status === "draft" || opts?.allowNonDraft)
           ? stampOnUpdate(r, {
               ...patch,
               ...(patch.status != null
@@ -290,6 +320,16 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
           : r,
       ),
     );
+  }, []);
+  const confirmPurchaseContract = useCallback((id: string, opts?: { confirmedBy?: string }) => {
+    let ok = false;
+    setPurchaseContracts((list) => list.map((row) => {
+      const nextStatus = confirmContractStatus(row.id === id ? row.status : "");
+      if (!nextStatus) return row;
+      ok = true;
+      return stampOnUpdate(row, { status: nextStatus, confirmedAt: nowLocalDateTime(), confirmedBy: opts?.confirmedBy?.trim() || undefined } as Partial<PurchaseContract>);
+    }));
+    return ok;
   }, []);
   const removePurchaseContract = useCallback((id: string) => {
     setPurchaseContracts((list) => list.filter((r) => r.id !== id));
@@ -304,10 +344,10 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     setSaleContracts((list) => [row, ...list]);
     return row;
   }, []);
-  const updateSaleContract = useCallback((id: string, patch: Partial<SaleContract>) => {
+  const updateSaleContract = useCallback((id: string, patch: Partial<SaleContract>, opts?: { allowNonDraft?: boolean }) => {
     setSaleContracts((list) =>
       list.map((r) =>
-        r.id === id
+        r.id === id && (r.status === "draft" || opts?.allowNonDraft)
           ? stampOnUpdate(r, {
               ...patch,
               ...(patch.status != null ? { status: normalizeSaleStatus(patch.status) } : {}),
@@ -315,6 +355,16 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
           : r,
       ),
     );
+  }, []);
+  const confirmSaleContract = useCallback((id: string, opts?: { confirmedBy?: string }) => {
+    let ok = false;
+    setSaleContracts((list) => list.map((row) => {
+      const nextStatus = confirmContractStatus(row.id === id ? row.status : "");
+      if (!nextStatus) return row;
+      ok = true;
+      return stampOnUpdate(row, { status: nextStatus, confirmedAt: nowLocalDateTime(), confirmedBy: opts?.confirmedBy?.trim() || undefined } as Partial<SaleContract>);
+    }));
+    return ok;
   }, []);
   const removeSaleContract = useCallback(
     (id: string) => {
@@ -327,7 +377,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
 
   const addWeighTicket = useCallback(
     (input: CreateInput<WeighTicket>) => {
-      const row = stampOnCreate({ ...input, id: uid("w") });
+      const row = stampOnCreate({ ...input, status: input.status ?? "pending", id: uid("w") });
       setWeighTickets((list) => {
         const next = [row, ...list];
         syncSaleFulfillment(next);
@@ -342,7 +392,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     (id: string, patch: Partial<WeighTicket>) => {
       setWeighTickets((list) => {
         const prev = list.find((r) => r.id === id);
-        if (!prev) return list;
+        if (!prev || prev.status !== "pending") return list;
         const next = stampOnUpdate(prev, patch);
         const nextList = list.map((r) => (r.id === id ? next : r));
         syncSaleFulfillment(nextList);
@@ -351,6 +401,16 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     },
     [syncSaleFulfillment],
   );
+  const confirmWeighTicket = useCallback((id: string, opts?: { confirmedBy?: string }) => {
+    let ok = false;
+    setWeighTickets((list) => list.map((row) => {
+      const nextStatus = confirmTicketStatus(row.id === id ? row.status : "");
+      if (!nextStatus) return row;
+      ok = true;
+      return stampOnUpdate(row, { status: nextStatus, confirmedAt: nowLocalDateTime(), confirmedBy: opts?.confirmedBy?.trim() || undefined });
+    }));
+    return ok;
+  }, []);
 
   const removeWeighTicket = useCallback(
     (id: string) => {
@@ -501,7 +561,12 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const addPayment = useCallback((input: CreateInput<PaymentRecord>) => {
-    const row = stampOnCreate({ ...input, id: uid("p") });
+    const row = stampOnCreate({
+      ...input,
+      paymentNo: input.paymentNo ?? nextPaymentNo(payments, input.date),
+      status: input.status ?? "pending",
+      id: uid("p"),
+    });
     setPayments((list) => {
       const next = [row, ...list];
       const docId = paymentSettlementDocId(row);
@@ -515,12 +580,31 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       return next;
     });
     return row;
+  }, [payments]);
+
+  const confirmPayment = useCallback((id: string, opts?: { confirmedBy?: string }) => {
+    let ok = false;
+    setPayments((list) => {
+      const current = list.find((row) => row.id === id);
+      const nextStatus = confirmPaymentStatus(current?.status ?? "");
+      if (!current || !nextStatus) return list;
+      ok = true;
+      const nextRow = stampOnUpdate(current, { status: nextStatus, confirmedAt: nowLocalDateTime(), confirmedBy: opts?.confirmedBy?.trim() || undefined });
+      const next = list.map((row) => row.id === id ? nextRow : row);
+      const docId = paymentSettlementDocId(nextRow);
+      if (nextRow.category === "settlement" && docId) {
+        if (nextRow.type === "receipt") setReceivables((ar) => syncArApFromPayments(ar, next, [docId], "receipt"));
+        else setPayables((ap) => syncArApFromPayments(ap, next, [docId], "payment"));
+      }
+      return next;
+    });
+    return ok;
   }, []);
 
   const updatePayment = useCallback((id: string, patch: Partial<PaymentRecord>) => {
     setPayments((list) => {
       const prev = list.find((r) => r.id === id);
-      if (!prev) return list;
+      if (!prev || (prev.status ?? "confirmed") !== "pending") return list;
       const nextRow = stampOnUpdate(prev, patch);
       const next = list.map((r) => (r.id === id ? nextRow : r));
       const docIds = [
@@ -637,6 +721,23 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     setProjectTypes((list) => list.filter((r) => r.id !== id));
   }, []);
 
+  const addPaymentMiscCategory = useCallback((input: CreateInput<PaymentMiscCategory>) => {
+    const row = stampOnCreate({ ...input, id: uid("pmc") });
+    setPaymentMiscCategories((list) => [row, ...list]);
+    return row;
+  }, []);
+  const updatePaymentMiscCategory = useCallback(
+    (id: string, patch: Partial<PaymentMiscCategory>) => {
+      setPaymentMiscCategories((list) =>
+        list.map((r) => (r.id === id ? stampOnUpdate(r, patch) : r)),
+      );
+    },
+    [],
+  );
+  const removePaymentMiscCategory = useCallback((id: string) => {
+    setPaymentMiscCategories((list) => list.filter((r) => r.id !== id));
+  }, []);
+
   const addEmployee = useCallback((input: CreateInput<User>) => {
     const row = stampOnCreate({ ...input, id: uid("u") });
     setEmployees((list) => [row, ...list]);
@@ -684,6 +785,60 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
     setRoles((list) => list.filter((r) => r.id !== id));
   }, []);
 
+  const correctionSource = useMemo<CorrectionSource>(
+    () => ({
+      purchaseContracts,
+      saleContracts,
+      weighTickets,
+      weighSettlementDocs,
+      receivables,
+      payables,
+      payments,
+    }),
+    [purchaseContracts, saleContracts, weighTickets, weighSettlementDocs, receivables, payables, payments],
+  );
+
+  const previewCorrection = useCallback(
+    (target: CorrectionTarget) => buildCorrectionImpact(correctionSource, target),
+    [correctionSource],
+  );
+
+  const forceCorrection = useCallback(
+    (target: CorrectionTarget, reason: string, actorName?: string) => {
+      const trimmed = reason.trim();
+      if (!trimmed) throw new Error("INVALID_REASON");
+      const correctionAt = nowLocalDateTime();
+      const existingBatchIds = [
+        ...purchaseContracts,
+        ...saleContracts,
+        ...weighTickets,
+        ...weighSettlementDocs,
+        ...receivables,
+        ...payables,
+        ...payments,
+        ...correctionAuditEvents,
+      ]
+        .map((row) => ("reversalBatchId" in row ? row.reversalBatchId : undefined))
+        .filter((batchId): batchId is string => Boolean(batchId));
+      const result = applyCorrection(correctionSource, target, {
+        reason: trimmed,
+        batchId: nextCorrectionBatchNo(existingBatchIds, correctionAt),
+        actorName: actorName?.trim() || "超级管理员",
+        at: correctionAt,
+      });
+      setPurchaseContracts(result.purchaseContracts);
+      setSaleContracts(result.saleContracts);
+      setWeighTickets(result.weighTickets);
+      setWeighSettlementDocs(result.weighSettlementDocs);
+      setReceivables(result.receivables);
+      setPayables(result.payables);
+      setPayments(result.payments);
+      setCorrectionAuditEvents((events) => [...result.auditEvents, ...events]);
+      return buildCorrectionImpact(correctionSource, target);
+    },
+    [correctionAuditEvents, correctionSource, payables, payments, purchaseContracts, receivables, saleContracts, weighSettlementDocs, weighTickets],
+  );
+
   const value = useMemo(
     () => ({
       tenant,
@@ -691,14 +846,17 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       purchaseContracts,
       addPurchaseContract,
       updatePurchaseContract,
+      confirmPurchaseContract,
       removePurchaseContract,
       saleContracts,
       addSaleContract,
       updateSaleContract,
+      confirmSaleContract,
       removeSaleContract,
       weighTickets,
       addWeighTicket,
       updateWeighTicket,
+      confirmWeighTicket,
       removeWeighTicket,
       weighSettlementDocs,
       addWeighSettlementDoc,
@@ -717,6 +875,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       payments,
       addPayment,
       updatePayment,
+      confirmPayment,
       removePayment,
       customers,
       addCustomer,
@@ -735,6 +894,10 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       addProjectType,
       updateProjectType,
       removeProjectType,
+      paymentMiscCategories,
+      addPaymentMiscCategory,
+      updatePaymentMiscCategory,
+      removePaymentMiscCategory,
       employees,
       addEmployee,
       updateEmployee,
@@ -743,6 +906,9 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       addRole,
       updateRole,
       removeRole,
+      correctionAuditEvents,
+      previewCorrection,
+      forceCorrection,
     }),
     [
       tenant,
@@ -750,14 +916,17 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       purchaseContracts,
       addPurchaseContract,
       updatePurchaseContract,
+      confirmPurchaseContract,
       removePurchaseContract,
       saleContracts,
       addSaleContract,
       updateSaleContract,
+      confirmSaleContract,
       removeSaleContract,
       weighTickets,
       addWeighTicket,
       updateWeighTicket,
+      confirmWeighTicket,
       removeWeighTicket,
       weighSettlementDocs,
       addWeighSettlementDoc,
@@ -776,6 +945,7 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       payments,
       addPayment,
       updatePayment,
+      confirmPayment,
       removePayment,
       customers,
       addCustomer,
@@ -794,6 +964,10 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       addProjectType,
       updateProjectType,
       removeProjectType,
+      paymentMiscCategories,
+      addPaymentMiscCategory,
+      updatePaymentMiscCategory,
+      removePaymentMiscCategory,
       employees,
       addEmployee,
       updateEmployee,
@@ -802,6 +976,9 @@ export function MockStoreProvider({ children }: { children: ReactNode }) {
       addRole,
       updateRole,
       removeRole,
+      correctionAuditEvents,
+      previewCorrection,
+      forceCorrection,
     ],
   );
 

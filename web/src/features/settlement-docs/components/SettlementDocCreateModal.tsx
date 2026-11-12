@@ -19,10 +19,14 @@ import {
   buildSettlementDocInput,
   listEligibleContracts,
   listEligibleTickets,
+  resolveContractFromTickets,
   usedTicketIdsFromDocs,
   type BuildSettlementError,
 } from "@/entities/settlement-doc";
+import { TablePagination } from "@/shared/ui/TablePagination";
 import type { WeighSettlementDoc, WeighSettlementKind } from "@/entities/types";
+
+const TICKET_PAGE_SIZE = 10;
 
 export function SettlementDocCreateModal({
   open,
@@ -50,6 +54,7 @@ export function SettlementDocCreateModal({
     weighSettlementDocs,
     addWeighSettlementDoc,
     updateWeighSettlementDoc,
+    confirmWeighSettlementDoc,
   } = useMockStore();
 
   useEffect(() => {
@@ -68,6 +73,7 @@ export function SettlementDocCreateModal({
     editingDoc?.ticketIds ?? [],
   );
   const [docDate, setDocDate] = useState(editingDoc?.docDate ?? todayISO());
+  const [ticketPage, setTicketPage] = useState(1);
 
   const usedTicketIds = useMemo(
     () =>
@@ -139,7 +145,6 @@ export function SettlementDocCreateModal({
   }, [contractId, kind, purchaseContracts, saleContracts, editingDoc]);
 
   const eligibleTickets = useMemo(() => {
-    if (!selectedContract) return [];
     return listEligibleTickets({
       tickets: weighTickets,
       kind,
@@ -156,6 +161,16 @@ export function SettlementDocCreateModal({
     dateStart,
     dateEnd,
   ]);
+
+  const ticketTotalPages = Math.max(
+    1,
+    Math.ceil(eligibleTickets.length / TICKET_PAGE_SIZE),
+  );
+
+  const pageTickets = useMemo(() => {
+    const start = (ticketPage - 1) * TICKET_PAGE_SIZE;
+    return eligibleTickets.slice(start, start + TICKET_PAGE_SIZE);
+  }, [eligibleTickets, ticketPage]);
 
   const selectedTickets = useMemo(
     () => eligibleTickets.filter((row) => selectedIds.includes(row.id)),
@@ -184,7 +199,12 @@ export function SettlementDocCreateModal({
     }
     setDateStart("");
     setDateEnd("");
+    setTicketPage(1);
   }, [open, initialKind, editingDoc]);
+
+  useEffect(() => {
+    if (ticketPage > ticketTotalPages) setTicketPage(ticketTotalPages);
+  }, [ticketPage, ticketTotalPages]);
 
   function settlementErrorText(error: BuildSettlementError) {
     if (error === "empty") return t("settlementDocs.errEmpty");
@@ -201,12 +221,14 @@ export function SettlementDocCreateModal({
   function handleContractChange(next: string) {
     setContractId(next);
     setSelectedIds([]);
+    setTicketPage(1);
   }
 
   function handleDateRangeChange(start: string, end: string) {
     setDateStart(start);
     setDateEnd(end);
     setSelectedIds([]);
+    setTicketPage(1);
   }
 
   function toggleSelect(id: string) {
@@ -223,19 +245,27 @@ export function SettlementDocCreateModal({
     setSelectedIds(eligibleTickets.map((r) => r.id));
   }
 
-  async function commit(mode: "save" | "preview") {
+  async function commit(mode: "save" | "confirm" | "preview") {
     if (editingDoc?.status === "confirmed") return;
-    if (!selectedContract) {
-      await confirm({
-        alert: true,
-        message: t("settlementDocs.errNoContract"),
-      });
-      return;
-    }
     if (selectedTickets.length === 0) {
       await confirm({
         alert: true,
         message: t("settlementDocs.errNoTickets"),
+      });
+      return;
+    }
+    const contractForSave =
+      selectedContract ??
+      resolveContractFromTickets(
+        selectedTickets,
+        kind,
+        purchaseContracts,
+        saleContracts,
+      );
+    if (!contractForSave) {
+      await confirm({
+        alert: true,
+        message: t("settlementDocs.errNoContract"),
       });
       return;
     }
@@ -244,7 +274,7 @@ export function SettlementDocCreateModal({
       existing: weighSettlementDocs.filter((d) => d.id !== editingDoc?.id),
       usedTicketIds,
       kind,
-      contract: selectedContract,
+      contract: contractForSave,
       preserve: editingDoc
         ? { no: editingDoc.no, status: editingDoc.status }
         : undefined,
@@ -256,13 +286,20 @@ export function SettlementDocCreateModal({
       });
       return;
     }
+    let savedId: string;
     if (editingDoc) {
       updateWeighSettlementDoc(editingDoc.id, built.input);
-      onSaved?.(editingDoc.id, { preview: mode === "preview" });
+      savedId = editingDoc.id;
     } else {
       const row = addWeighSettlementDoc(built.input);
-      onCreated?.(row.id, { preview: mode === "preview" });
+      savedId = row.id;
     }
+    if (mode === "confirm") {
+      const ok = await confirm({ title: "确认结算单", message: "确认后结算单将锁定，并生成应收/应付。后续修改只能走纠错删除。", confirmLabel: "确认并生成应收/应付" });
+      if (ok) confirmWeighSettlementDoc(savedId);
+    }
+    if (editingDoc) onSaved?.(savedId, { preview: mode === "preview" });
+    else onCreated?.(savedId, { preview: mode === "preview" });
     onClose();
   }
 
@@ -301,9 +338,9 @@ export function SettlementDocCreateModal({
           <button
             type="button"
             className="ui-btn-primary"
-            onClick={() => void commit("preview")}
+            onClick={() => void commit("confirm")}
           >
-            {t("settlementDocs.confirmCreate")}
+            确认并生成应收/应付
           </button>
         </>
       }
@@ -315,14 +352,6 @@ export function SettlementDocCreateModal({
       >
         <FormSection title={t("form.sectionBasic")}>
           <FormFieldGrid>
-            <FormField label={t("settlementDocs.pickContract")} required>
-              <SearchableSelect
-                value={contractId}
-                onChange={handleContractChange}
-                options={contractOptions}
-                placeholder={t("settlementDocs.pickContract")}
-              />
-            </FormField>
             <FormField label={t("common.date")} required>
               <DatePicker value={docDate} onChange={setDocDate} />
             </FormField>
@@ -330,32 +359,39 @@ export function SettlementDocCreateModal({
         </FormSection>
 
         <FormSection title={t("settlementDocs.pickTickets")}>
-          {!selectedContract ? (
+          <div className="mb-3 flex flex-wrap items-end gap-3">
+            <div className="flex min-w-[220px] flex-col gap-1 text-xs text-muted">
+              <span>{t("settlementDocs.pickContract")}</span>
+              <SearchableSelect
+                size="sm"
+                value={contractId}
+                onChange={handleContractChange}
+                options={contractOptions}
+                placeholder={t("common.all")}
+                searchPlaceholder={t("settlementDocs.pickContract")}
+                allowClear
+                clearValue=""
+              />
+            </div>
+            <div className="flex min-w-[220px] flex-col gap-1 text-xs text-muted">
+              <span>{t("fields.weighDateRange")}</span>
+              <DateRangePicker
+                size="sm"
+                start={dateStart}
+                end={dateEnd}
+                onChange={handleDateRangeChange}
+                className="min-w-[220px]"
+                aria-label={t("fields.weighDateRange")}
+              />
+            </div>
+          </div>
+          {eligibleTickets.length === 0 ? (
             <p className="text-sm text-muted">
-              {t("settlementDocs.pickContractFirst")}
+              {dateStart || dateEnd || contractId
+                ? t("settlementDocs.eligibleEmptyFiltered")
+                : t("settlementDocs.eligibleEmpty")}
             </p>
           ) : (
-            <>
-              <div className="mb-3 flex flex-wrap items-end gap-3">
-                <div className="flex min-w-[220px] flex-col gap-1 text-xs text-muted">
-                  <span>{t("fields.weighDateRange")}</span>
-                  <DateRangePicker
-                    size="sm"
-                    start={dateStart}
-                    end={dateEnd}
-                    onChange={handleDateRangeChange}
-                    className="min-w-[220px]"
-                    aria-label={t("fields.weighDateRange")}
-                  />
-                </div>
-              </div>
-              {eligibleTickets.length === 0 ? (
-                <p className="text-sm text-muted">
-                  {dateStart || dateEnd
-                    ? t("settlementDocs.eligibleEmptyFiltered")
-                    : t("settlementDocs.eligibleEmpty")}
-                </p>
-              ) : (
             <div className="overflow-hidden rounded-[var(--radius-control)] border border-border">
               <div className="flex items-center justify-between gap-2 border-b border-border bg-chip px-3 py-2">
                 <label className="inline-flex items-center gap-2 text-sm text-muted">
@@ -374,35 +410,34 @@ export function SettlementDocCreateModal({
                   )}
                 </span>
               </div>
-              <div className="ui-scrollbar-overlay max-h-64 overflow-auto">
-                <table className="min-w-full border-separate border-spacing-0 text-sm">
-                  <thead>
-                    <tr className="bg-chip text-left text-xs text-muted">
-                      <th className="px-3 py-2 font-semibold w-10" />
-                      <th className="px-3 py-2 font-semibold">
-                        {t("settlementDocs.colBx")}
-                      </th>
-                      <th className="px-3 py-2 font-semibold">
-                        {t("fields.weighDateTime")}
-                      </th>
-                      <th className="px-3 py-2 font-semibold">
-                        {t("fields.plate")}
-                      </th>
-                      <th className="px-3 py-2 font-semibold">
-                        {t("settlementDocs.colMaterial")}
-                      </th>
-                      <th className="px-3 py-2 font-semibold text-right">
-                        {t("fields.net")}
-                      </th>
-                      <th className="px-3 py-2 font-semibold text-right">
-                        {t("fields.amount")}
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {eligibleTickets.map((row) => {
-                      const checked = selectedIds.includes(row.id);
-                      return (
+              <table className="min-w-full border-separate border-spacing-0 text-sm">
+                <thead>
+                  <tr className="bg-chip text-left text-xs text-muted">
+                    <th className="px-3 py-2 font-semibold w-10" />
+                    <th className="px-3 py-2 font-semibold">
+                      {t("settlementDocs.colBx")}
+                    </th>
+                    <th className="px-3 py-2 font-semibold">
+                      {t("fields.weighDateTime")}
+                    </th>
+                    <th className="px-3 py-2 font-semibold">
+                      {t("fields.plate")}
+                    </th>
+                    <th className="px-3 py-2 font-semibold">
+                      {t("settlementDocs.colMaterial")}
+                    </th>
+                    <th className="px-3 py-2 font-semibold text-right">
+                      {t("fields.net")}
+                    </th>
+                    <th className="px-3 py-2 font-semibold text-right">
+                      {t("fields.amount")}
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pageTickets.map((row) => {
+                    const checked = selectedIds.includes(row.id);
+                    return (
                       <tr
                         key={row.id}
                         className={`border-t border-border cursor-pointer transition-colors${checked ? " bg-brand-soft/40" : " hover:bg-chip/80"}`}
@@ -433,29 +468,38 @@ export function SettlementDocCreateModal({
                           {formatMoney(row.amount)}
                         </td>
                       </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                    );
+                  })}
+                </tbody>
+              </table>
+              {eligibleTickets.length > TICKET_PAGE_SIZE ? (
+                <TablePagination
+                  variant="compact"
+                  className="border-t border-border"
+                  total={eligibleTickets.length}
+                  page={ticketPage}
+                  pageSize={TICKET_PAGE_SIZE}
+                  onPageChange={setTicketPage}
+                  onPageSizeChange={() => {}}
+                  pageSizeOptions={[TICKET_PAGE_SIZE]}
+                />
+              ) : null}
             </div>
-              )}
-              <div className="mt-3 flex flex-wrap gap-4 text-sm text-muted">
-                <span>
-                  {t("settlementDocs.summarySelected").replace(
-                    "{count}",
-                    String(selectedTickets.length),
-                  )}
-                </span>
-                <span>
-                  {t("settlementDocs.totalNet")} {formatKg(totalNetKg)}
-                </span>
-                <span>
-                  {t("settlementDocs.totalAmount")} {formatMoney(totalAmount)}
-                </span>
-              </div>
-            </>
           )}
+          <div className="mt-3 flex flex-wrap gap-4 text-sm text-muted">
+            <span>
+              {t("settlementDocs.summarySelected").replace(
+                "{count}",
+                String(selectedTickets.length),
+              )}
+            </span>
+            <span>
+              {t("settlementDocs.totalNet")} {formatKg(totalNetKg)}
+            </span>
+            <span>
+              {t("settlementDocs.totalAmount")} {formatMoney(totalAmount)}
+            </span>
+          </div>
         </FormSection>
       </form>
     </Modal>

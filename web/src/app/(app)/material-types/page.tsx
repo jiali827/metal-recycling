@@ -25,16 +25,18 @@ import { auditColumns, sortByCreatedAtDesc } from "@/shared/lib/list-columns";
 import { useI18n } from "@/shared/i18n";
 import { useMockStore } from "@/data/mock/store";
 import { useModulePermission } from "@/shared/config/menu-permissions";
-import type { MaterialType } from "@/entities/types";
+import type { MaterialMetalKind, MaterialType } from "@/entities/types";
 
 type TriFilter = "all" | "yes" | "no";
 type EnabledFilter = "all" | "enabled" | "disabled";
+type MetalKindFilter = "all" | MaterialMetalKind;
 
 export default function MaterialTypesPage() {
   const { t } = useI18n();
   const perm = useModulePermission("materialTypes");
   const { materialTypes, removeMaterialType } = useMockStore();
   const confirm = useConfirm();
+  const [metalKind, setMetalKind] = useState<MetalKindFilter>("all");
   const [keyword, setKeyword] = useState("");
   const [forPurchase, setForPurchase] = useState<TriFilter>("all");
   const [forSale, setForSale] = useState<TriFilter>("all");
@@ -51,6 +53,17 @@ export default function MaterialTypesPage() {
     [t],
   );
 
+  const metalKindOptions = useMemo(
+    () => [
+      { value: "all", label: t("common.all") },
+      { value: "copper", label: t("fields.materialMetalCopper") },
+      { value: "aluminum", label: t("fields.materialMetalAluminum") },
+      { value: "iron", label: t("fields.materialMetalIron") },
+      { value: "other", label: t("fields.materialMetalOther") },
+    ],
+    [t],
+  );
+
   const enabledOptions = useMemo(
     () => [
       { value: "all", label: t("common.all") },
@@ -63,6 +76,9 @@ export default function MaterialTypesPage() {
   const rows = useMemo(() => {
     return sortByCreatedAtDesc(
       materialTypes.filter((m) => {
+        if (metalKind !== "all" && (m.metalKind ?? "iron") !== metalKind) {
+          return false;
+        }
         if (keyword && !m.name.toLowerCase().includes(keyword.toLowerCase())) {
           return false;
         }
@@ -75,7 +91,7 @@ export default function MaterialTypesPage() {
         return true;
       }),
     );
-  }, [materialTypes, keyword, forPurchase, forSale, enabled]);
+  }, [materialTypes, metalKind, keyword, forPurchase, forSale, enabled]);
 
   async function handleDelete(row: MaterialType) {
     const ok = await confirm(deleteConfirmMessage(row.name));
@@ -84,11 +100,64 @@ export default function MaterialTypesPage() {
     if (detailId === row.id) setDetailId(null);
   }
 
+  const metalKindLabel = (kind: MaterialMetalKind) =>
+    kind === "copper"
+      ? t("fields.materialMetalCopper")
+      : kind === "aluminum"
+        ? t("fields.materialMetalAluminum")
+        : kind === "other"
+          ? t("fields.materialMetalOther")
+          : t("fields.materialMetalIron");
+
+  const metalKindTone = (kind: MaterialMetalKind) =>
+    kind === "copper"
+      ? "danger"
+      : kind === "aluminum"
+        ? "info"
+        : kind === "other"
+          ? "muted"
+          : "warning";
+
+  const fmtKg = (n: number | undefined) =>
+    (n ?? 0).toLocaleString("zh-HK");
+
   const columns: Column<MaterialType>[] = [
+    {
+      key: "metalKind",
+      header: t("fields.materialMetalKind"),
+      render: (r) => (
+        <StatusBadge tone={metalKindTone(r.metalKind ?? "iron")}>
+          {metalKindLabel(r.metalKind ?? "iron")}
+        </StatusBadge>
+      ),
+    },
     {
       key: "name",
       header: t("form.colMaterialName"),
       render: (r) => <span className="font-medium">{r.name}</span>,
+    },
+    {
+      key: "openingStock",
+      header: t("fields.openingStockKg"),
+      render: (r) => (
+        <span className="font-medium tabular-nums">
+          {fmtKg(r.openingStockKg)} KG
+        </span>
+      ),
+    },
+    {
+      key: "currentStock",
+      header: t("fields.currentStockKg"),
+      render: (r) => {
+        const v = r.currentStockKg ?? 0;
+        return (
+          <span
+            className={`font-medium tabular-nums ${v < 0 ? "text-danger" : v === 0 ? "text-muted" : ""}`}
+          >
+            {fmtKg(v)} KG
+          </span>
+        );
+      },
     },
     {
       key: "purchase",
@@ -142,6 +211,15 @@ export default function MaterialTypesPage() {
         ) : null}
       />
       <FilterBar>
+        <FilterField label={t("fields.materialMetalKind")}>
+          <SegmentedControl
+            size="sm"
+            value={metalKind}
+            onChange={(v) => setMetalKind(v as MetalKindFilter)}
+            options={metalKindOptions}
+            aria-label={t("fields.materialMetalKind")}
+          />
+        </FilterField>
         <FilterField label={t("common.keyword")}>
           <TextInput
             size="sm"

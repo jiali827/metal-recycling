@@ -7,6 +7,7 @@ import {
   isTicketLinkedToContract,
   listEligibleContracts,
   listEligibleTickets,
+  resolveContractFromTickets,
   ticketMatchesContract,
 } from "./eligible";
 import type {
@@ -19,6 +20,7 @@ function baseTicket(patch: Partial<WeighTicket> & Pick<WeighTicket, "id" | "bxNo
   return {
     direction: "purchase",
     date: "2026-07-23T10:00",
+    customerCategory: "customer",
     customerName: "客户甲",
     plate: "AA1111",
     materialSummary: "PNS",
@@ -107,6 +109,36 @@ describe("listEligibleTickets", () => {
       usedTicketIds: new Set(["used"]),
     });
     expect(rows.map((r) => r.id)).toEqual(["ok"]);
+  });
+
+  it("without contract filter returns all eligible tickets for kind", () => {
+    const tickets = [
+      baseTicket({ id: "t1", bxNo: "1", contractNo: "PO-001" }),
+      baseTicket({
+        id: "t2",
+        bxNo: "2",
+        contractNo: "PO-002",
+        customerName: "客户乙",
+      }),
+    ];
+    const rows = listEligibleTickets({
+      tickets,
+      kind: "purchase",
+      usedTicketIds: new Set(),
+    });
+    expect(rows.map((r) => r.id)).toEqual(["t1", "t2"]);
+  });
+});
+
+describe("resolveContractFromTickets", () => {
+  it("resolves purchase contract from ticket contractNo", () => {
+    const tickets = [baseTicket({ id: "t1", bxNo: "1", contractNo: "PO-001" })];
+    const ref = resolveContractFromTickets(tickets, "purchase", [purchaseContract], []);
+    expect(ref).toEqual({
+      id: "pc1",
+      no: "PO-001",
+      customerName: "客户甲",
+    });
   });
 });
 

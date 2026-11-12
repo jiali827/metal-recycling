@@ -47,6 +47,8 @@ import { contractStatusLabel } from "@/shared/i18n/labels";
 import { useMockStore } from "@/data/mock/store";
 import { useModulePermission } from "@/shared/config/menu-permissions";
 import type { PurchaseContract, PurchasePriceMode, SaleContract } from "@/entities/types";
+import { CorrectionDeleteModal } from "@/features/correction/components/CorrectionDeleteModal";
+import { useQueryPrefill } from "@/shared/hooks/useQueryPrefill";
 
 const TAB_KEY = "bx-contracts-tab";
 type Tab = "purchase" | "sale";
@@ -94,6 +96,9 @@ export default function ContractsPage() {
   const [derivedFilter, setDerivedFilter] = useState("all");
   const [createOpen, setCreateOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [correctionTarget, setCorrectionTarget] = useState<{ type: "purchase-contract" | "sale-contract"; id: string; label: string } | null>(null);
+
+  useQueryPrefill("contractNo", setKeyword);
 
   useEffect(() => {
     try {
@@ -154,24 +159,29 @@ export default function ContractsPage() {
   }, [saleContracts, keyword, status, derivedFilter]);
 
   async function handleDeletePurchase(row: PurchaseContract) {
-    const ok = await confirm(deleteConfirmMessage(row.no));
-    if (!ok) return;
-    removePurchaseContract(row.id);
-    if (detailId === row.id) setDetailId(null);
+    if (row.status === "draft") {
+      const ok = await confirm(deleteConfirmMessage(row.no));
+      if (!ok) return;
+      removePurchaseContract(row.id);
+      if (detailId === row.id) setDetailId(null);
+      return;
+    }
+    setCorrectionTarget({ type: "purchase-contract", id: row.id, label: row.no });
   }
 
   async function handleDeleteSale(row: SaleContract) {
-    const ok = await confirm(deleteConfirmMessage(row.no));
-    if (!ok) return;
-    const removed = removeSaleContract(row.id);
-    if (!removed) {
-      void confirm({
-        alert: true,
-        message: t("contracts.cannotDeleteLinked"),
-      });
+    if (row.status === "draft") {
+      const ok = await confirm(deleteConfirmMessage(row.no));
+      if (!ok) return;
+      const removed = removeSaleContract(row.id);
+      if (!removed) {
+        void confirm({ alert: true, message: t("contracts.cannotDeleteLinked") });
+        return;
+      }
+      if (detailId === row.id) setDetailId(null);
       return;
     }
-    if (detailId === row.id) setDetailId(null);
+    setCorrectionTarget({ type: "sale-contract", id: row.id, label: row.no });
   }
 
   const purchaseColumns: Column<PurchaseContract>[] = [
@@ -231,7 +241,9 @@ export default function ContractsPage() {
       render: (r) => (
         <RowActions
           onDetail={() => setDetailId(r.id)}
-          onDelete={perm.canDelete ? () => void handleDeletePurchase(r) : undefined}
+          readOnly={r.status !== "draft"}
+          onDelete={perm.canDelete && r.status === "draft" ? () => void handleDeletePurchase(r) : undefined}
+          onCorrection={perm.canDelete && r.status !== "draft" && r.status !== "void" ? () => void handleDeletePurchase(r) : undefined}
         />
       ),
     },
@@ -304,7 +316,9 @@ export default function ContractsPage() {
       render: (r) => (
         <RowActions
           onDetail={() => setDetailId(r.id)}
-          onDelete={perm.canDelete ? () => void handleDeleteSale(r) : undefined}
+          readOnly={r.status !== "draft"}
+          onDelete={perm.canDelete && r.status === "draft" ? () => void handleDeleteSale(r) : undefined}
+          onCorrection={perm.canDelete && r.status !== "draft" && r.status !== "void" ? () => void handleDeleteSale(r) : undefined}
         />
       ),
     },
@@ -380,6 +394,15 @@ export default function ContractsPage() {
             {tab === "purchase" ? t("contracts.newPurchase") : t("contracts.newSale")}
           </PrimaryButton>
         ) : null}
+      />
+      <CorrectionDeleteModal
+        open={Boolean(correctionTarget)}
+        target={correctionTarget}
+        label={correctionTarget?.label ?? ""}
+        onClose={() => setCorrectionTarget(null)}
+        onCompleted={() => {
+          if (correctionTarget && detailId === correctionTarget.id) setDetailId(null);
+        }}
       />
       <FilterBar>
         <FilterField label={t("common.keyword")}>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ListPageLayout } from "@/shared/layout/ListPageLayout";
 import { PageHeader } from "@/shared/ui/PageHeader";
 import { DataTable, type Column } from "@/shared/ui/DataTable";
@@ -16,20 +16,20 @@ import {
   Select,
   TextInput
 } from "@/shared/ui/CrudUi";
-import { useConfirm } from "@/shared/ui/ConfirmDialog";
 import {
   WeighTicketCreateModal,
   WeighTicketDetailModal,
 } from "@/features/lazy-modals";
-import { deleteConfirmMessage } from "@/shared/lib/confirm-delete";
 import { formatKg, formatMoney } from "@/shared/lib/format";
 import { formatWeighDateTime } from "@/shared/lib/date";
 import { auditColumns, sortByCreatedAtDesc } from "@/shared/lib/list-columns";
 import { useI18n } from "@/shared/i18n";
-import { fieldLabels, ticketStatusLabel } from "@/shared/i18n/labels";
+import { fieldLabels, localizeWeighCustomerCategory, ticketStatusLabel } from "@/shared/i18n/labels";
 import { useMockStore } from "@/data/mock/store";
 import { useModulePermission } from "@/shared/config/menu-permissions";
 import type { WeighTicket } from "@/entities/types";
+import { CorrectionDeleteModal } from "@/features/correction/components/CorrectionDeleteModal";
+import { useQueryPrefill } from "@/shared/hooks/useQueryPrefill";
 
 function weighDateKey(value: string): string {
   if (/^\d{4}-\d{2}-\d{2}/.test(value)) return value.slice(0, 10);
@@ -46,11 +46,9 @@ export default function WeighTicketsPage() {
   const perm = useModulePermission("weighTickets");
   const {
     weighTickets,
-    removeWeighTicket,
     customers,
     materialTypes,
   } = useMockStore();
-  const confirm = useConfirm();
   const [keyword, setKeyword] = useState("");
   const [direction, setDirection] = useState("all");
   const [status, setStatus] = useState("all");
@@ -61,6 +59,9 @@ export default function WeighTicketsPage() {
   const [contractNo, setContractNo] = useState("");
   const [createOpen, setCreateOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [correctionTarget, setCorrectionTarget] = useState<{ type: "weigh-ticket"; id: string; label: string } | null>(null);
+
+  useQueryPrefill("bxNo", setKeyword);
 
   const customerOptions = useMemo(() => {
     const names = [...new Set(customers.map((c) => c.name))].sort((a, b) =>
@@ -107,7 +108,7 @@ export default function WeighTicketsPage() {
         }
         if (
           keyword &&
-          !`${row.bxNo}${row.customerName}${row.plate}${row.materialSummary}`
+          !`${row.bxNo}${row.customerName}${row.plate}${row.materialSummary}${localizeWeighCustomerCategory(row.customerCategory ?? "customer")}`
             .toLowerCase()
             .includes(keyword.toLowerCase())
         ) {
@@ -129,13 +130,20 @@ export default function WeighTicketsPage() {
   ]);
 
   async function handleDelete(row: WeighTicket) {
-    const ok = await confirm(deleteConfirmMessage(`BX${row.bxNo}`));
-    if (!ok) return;
-    removeWeighTicket(row.id);
-    if (detailId === row.id) setDetailId(null);
+    if (row.status === "void") return;
+    setCorrectionTarget({ type: "weigh-ticket", id: row.id, label: `BX${row.bxNo}` });
   }
 
   const columns: Column<WeighTicket>[] = [
+    {
+      key: "customerCategory",
+      header: fieldLabels.customerCategory,
+      render: (r) => (
+        <StatusBadge tone={r.customerCategory === "retail" ? "default" : "info"}>
+          {localizeWeighCustomerCategory(r.customerCategory ?? "customer")}
+        </StatusBadge>
+      ),
+    },
     {
       key: "bx",
       header: fieldLabels.bxNo,
@@ -200,7 +208,9 @@ export default function WeighTicketsPage() {
       render: (r) => (
         <RowActions
           onDetail={() => setDetailId(r.id)}
-          onDelete={perm.canDelete ? () => void handleDelete(r) : undefined}
+          readOnly={r.status !== "pending"}
+          onDelete={perm.canDelete && r.status === "pending" ? () => void handleDelete(r) : undefined}
+          onCorrection={perm.canDelete && r.status === "normal" ? () => void handleDelete(r) : undefined}
         />
       ),
     },
@@ -217,6 +227,15 @@ export default function WeighTicketsPage() {
             </PrimaryButton>
           ) : null
         }
+      />
+      <CorrectionDeleteModal
+        open={Boolean(correctionTarget)}
+        target={correctionTarget}
+        label={correctionTarget?.label ?? ""}
+        onClose={() => setCorrectionTarget(null)}
+        onCompleted={() => {
+          if (correctionTarget && detailId === correctionTarget.id) setDetailId(null);
+        }}
       />
       <FilterBar>
         <FilterField label={t("common.keyword")}>
@@ -283,6 +302,7 @@ export default function WeighTicketsPage() {
             onChange={setStatus}
             options={[
               { value: "all", label: t("common.all") },
+              { value: "pending", label: t("status.pending") },
               { value: "normal", label: t("status.normal") },
               { value: "void", label: t("status.void") },
             ]}

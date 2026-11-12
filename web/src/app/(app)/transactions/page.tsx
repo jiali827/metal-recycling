@@ -206,14 +206,13 @@ export default function TransactionsPage() {
 
       <div className="shrink-0">
         <FilterBar>
-        <FilterField label={t("common.type")}>
+        <FilterField label={t("common.type")} className="min-w-0">
           <SegmentedControl
             size="sm"
             value={typeTab}
             onChange={(value) => setTypeTab(value as TypeTab)}
             options={typeTabOptions}
             aria-label={t("common.type")}
-            className="w-full min-w-[280px]"
           />
         </FilterField>
         <FilterField label={t("common.keyword")}>

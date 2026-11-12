@@ -8,8 +8,11 @@ import {
   FormFieldGrid,
   MultiSelect,
   Switch,
+  DatePicker,
+  InputWithUnit,
   inputClass,
 } from "@/shared/ui/CrudUi";
+import { useMoneyUnits } from "@/shared/lib/use-money-units";
 import {
   buildEmployeeRoles,
   getUserRoleIds,
@@ -65,9 +68,12 @@ export function EmployeeCreateModal({
   onCreated?: (id: string) => void;
 }) {
   const { t } = useI18n();
+  const moneyUnits = useMoneyUnits();
   const { addEmployee, roles, employees } = useMockStore();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [monthlySalary, setMonthlySalary] = useState("");
+  const [salaryEffectiveDate, setSalaryEffectiveDate] = useState("");
   const [roleIds, setRoleIds] = useState<RoleId[]>([]);
   const [status, setStatus] = useState<"active" | "disabled">("disabled");
   const [roleError, setRoleError] = useState("");
@@ -77,6 +83,8 @@ export function EmployeeCreateModal({
     if (!open) return;
     setName("");
     setEmail("");
+    setMonthlySalary("");
+    setSalaryEffectiveDate("");
     setRoleIds([]);
     setStatus("disabled");
     setRoleError("");
@@ -107,6 +115,8 @@ export function EmployeeCreateModal({
       email: normalizeEmployeeEmail(trimmedEmail),
       roleIds: normalized,
       status,
+      monthlySalary: monthlySalary.trim() ? Number(monthlySalary) : undefined,
+      salaryEffectiveDate: salaryEffectiveDate || undefined,
     });
     initializeAccountPassword(row.email);
     onCreated?.(row.id);
@@ -151,6 +161,21 @@ export function EmployeeCreateModal({
           />
           {emailError ? <p className="mt-1 text-sm text-danger">{emailError}</p> : null}
         </FormField>
+        <FormFieldGrid>
+          <FormField label={t("form.monthlySalary")} hint={t("form.monthlySalaryHint")}>
+            <InputWithUnit
+              type="number"
+              step="0.01"
+              min="0"
+              value={monthlySalary}
+              onChange={(e) => setMonthlySalary(e.target.value)}
+              unit={moneyUnits.money}
+            />
+          </FormField>
+          <FormField label={t("form.salaryEffectiveDate")}>
+            <DatePicker value={salaryEffectiveDate} onChange={setSalaryEffectiveDate} />
+          </FormField>
+        </FormFieldGrid>
         <FormField label={t("form.role")} required>
           <RoleMultiSelect
             roleIds={roleIds}
@@ -188,10 +213,13 @@ export function EmployeeDetailModal({
   readOnly?: boolean;
 }) {
   const { t } = useI18n();
+  const moneyUnits = useMoneyUnits();
   const confirm = useConfirm();
   const { employees, roles, updateEmployee } = useMockStore();
   const row = id ? employees.find((u) => u.id === id) : undefined;
   const [name, setName] = useState("");
+  const [monthlySalary, setMonthlySalary] = useState("");
+  const [salaryEffectiveDate, setSalaryEffectiveDate] = useState("");
   const [roleIds, setRoleIds] = useState<RoleId[]>(["admin"]);
   const [status, setStatus] = useState<"active" | "disabled">("active");
   const [saved, setSaved] = useState(false);
@@ -201,6 +229,8 @@ export function EmployeeDetailModal({
   useEffect(() => {
     if (!open || !row) return;
     setName(row.name);
+    setMonthlySalary(row.monthlySalary != null ? String(row.monthlySalary) : "");
+    setSalaryEffectiveDate(row.salaryEffectiveDate ?? "");
     setRoleIds(getUserRoleIds(row));
     setStatus(row.status);
     setSaved(false);
@@ -228,6 +258,8 @@ export function EmployeeDetailModal({
       name,
       roleIds: normalized,
       status,
+      monthlySalary: monthlySalary.trim() ? Number(monthlySalary) : undefined,
+      salaryEffectiveDate: salaryEffectiveDate || undefined,
     });
     setSaved(true);
   }
@@ -307,6 +339,19 @@ export function EmployeeDetailModal({
                 readOnly
                 autoComplete="username"
               />
+            </FormField>
+            <FormField label={t("form.monthlySalary")} hint={t("form.monthlySalaryHint")}>
+              <InputWithUnit
+                type="number"
+                step="0.01"
+                min="0"
+                value={monthlySalary}
+                onChange={(e) => setMonthlySalary(e.target.value)}
+                unit={moneyUnits.money}
+              />
+            </FormField>
+            <FormField label={t("form.salaryEffectiveDate")}>
+              <DatePicker value={salaryEffectiveDate} onChange={setSalaryEffectiveDate} />
             </FormField>
             <FormFieldFull>
               <FormField label={t("form.role")} required>

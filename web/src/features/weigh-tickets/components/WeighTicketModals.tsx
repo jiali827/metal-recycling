@@ -22,13 +22,17 @@ import {
   contractFieldsForWeighTicketFromSale,
 } from "@/entities/contract/form";
 import { saleLineOverTolerance } from "@/entities/contract/summaries";
-import { nextWeighTicketBxNo } from "@/entities/weigh-ticket/bx-no";
+import {
+  nextRetailWeighTicketBxNo,
+  nextWeighTicketBxNo,
+} from "@/entities/weigh-ticket/bx-no";
 import { nowLocalDateTime } from "@/shared/lib/date";
 import { formatKg, formatMoney } from "@/shared/lib/format";
 import { useMockStore } from "@/data/mock/store";
 import { useMoneyUnits } from "@/shared/lib/use-money-units";
 import { useI18n } from "@/shared/i18n";
-import type { TicketDirection, TicketStatus } from "@/entities/types";
+import { CorrectionInfo } from "@/features/correction/components/CorrectionInfo";
+import type { TicketDirection, TicketStatus, WeighCustomerCategory } from "@/entities/types";
 
 const NO_CONTRACT = "";
 
@@ -74,10 +78,11 @@ export function WeighTicketCreateModal({
 }) {
   const { t } = useI18n();
   const confirm = useConfirm();
-  const { addWeighTicket, weighTickets, customers, purchaseContracts, saleContracts, materialTypes } =
+  const { addWeighTicket, confirmWeighTicket, weighTickets, customers, purchaseContracts, saleContracts, materialTypes } =
     useMockStore();
   const moneyUnits = useMoneyUnits();
   const [bxNo, setBxNo] = useState("");
+  const [customerCategory, setCustomerCategory] = useState<WeighCustomerCategory>("customer");
   const [contractNo, setContractNo] = useState(NO_CONTRACT);
   const [saleContractId, setSaleContractId] = useState(NO_CONTRACT);
   const [saleContractLineId, setSaleContractLineId] = useState(NO_CONTRACT);
@@ -91,11 +96,18 @@ export function WeighTicketCreateModal({
   const [deductionKg, setDeductionKg] = useState("");
   const [unitPrice, setUnitPrice] = useState("");
   const [remarks, setRemarks] = useState("");
-
   const directionOptions = useMemo(
     () => [
       { value: "purchase", label: t("common.purchase") },
       { value: "sale", label: t("common.sale") },
+    ],
+    [t],
+  );
+
+  const customerCategoryOptions = useMemo(
+    () => [
+      { value: "retail", label: t("fields.customerCategoryRetail") },
+      { value: "customer", label: t("fields.customerCategoryCustomer") },
     ],
     [t],
   );
@@ -116,7 +128,7 @@ export function WeighTicketCreateModal({
 
   useEffect(() => {
     if (!open) return;
-    setBxNo(nextWeighTicketBxNo(weighTickets));
+    setCustomerCategory("customer");
     setContractNo(preset?.contractNo ?? NO_CONTRACT);
     setSaleContractId(preset?.saleContractId ?? NO_CONTRACT);
     setSaleContractLineId(preset?.saleContractLineId ?? NO_CONTRACT);
@@ -131,6 +143,15 @@ export function WeighTicketCreateModal({
     setUnitPrice("");
     setRemarks("");
   }, [open, preset]);
+
+  useEffect(() => {
+    if (!open) return;
+    if (customerCategory === "retail") {
+      setBxNo(nextRetailWeighTicketBxNo(weighTickets, date));
+    } else {
+      setBxNo(nextWeighTicketBxNo(weighTickets));
+    }
+  }, [open, customerCategory, weighTickets, date]);
 
   useEffect(() => {
     if (!open || !preset?.contractNo) return;
@@ -173,7 +194,7 @@ export function WeighTicketCreateModal({
   const materialOptions = materialTypes.map((m) => ({ value: m.name, label: m.name }));
   const purchaseContractOptions = [
     { value: NO_CONTRACT, label: t("form.noContract") },
-    ...purchaseContracts.map((c) => ({
+    ...purchaseContracts.filter((c) => c.status === "active").map((c) => ({
       value: c.no,
       label: `${c.no} · ${c.customerName}`,
     })),
@@ -192,6 +213,10 @@ export function WeighTicketCreateModal({
       value: l.id,
       label: `${l.materialName} · ${l.plannedQty} KG`,
     })) ?? [];
+
+  function handleCustomerCategoryChange(next: WeighCustomerCategory) {
+    setCustomerCategory(next);
+  }
 
   function handlePurchaseContractChange(no: string) {
     setContractNo(no);
@@ -231,7 +256,7 @@ export function WeighTicketCreateModal({
     setSaleContractLineId(NO_CONTRACT);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent, shouldConfirm = false) {
     e.preventDefault();
     if (direction === "sale" && saleContractId && !saleContractLineId) return;
     if (direction === "sale" && saleContract && saleLine) {
@@ -246,12 +271,20 @@ export function WeighTicketCreateModal({
         });
       }
     }
-    const assignedBxNo = nextWeighTicketBxNo(weighTickets);
+    if (shouldConfirm) {
+      const ok = await confirm({ title: "确认过磅", message: "确认后过磅台账将锁定，结算单才可以关联。后续修改只能走纠错删除。", confirmLabel: "确认并锁定" });
+      if (!ok) return;
+    }
+    const assignedBxNo =
+      customerCategory === "retail"
+        ? nextRetailWeighTicketBxNo(weighTickets, date)
+        : nextWeighTicketBxNo(weighTickets);
     const row = addWeighTicket({
       bxNo: assignedBxNo,
       direction,
       date,
-      customerName,
+      customerCategory,
+      customerName: customerName.trim() || "-",
       plate: plate || "-",
       materialSummary,
       grossKg: Number(grossKg) || 0,
@@ -263,9 +296,10 @@ export function WeighTicketCreateModal({
       saleContractId: direction === "sale" && saleContractId ? saleContractId : undefined,
       saleContractLineId:
         direction === "sale" && saleContractLineId ? saleContractLineId : undefined,
-      status: "normal",
+      status: "pending",
       remarks: remarks || undefined,
     });
+    if (shouldConfirm) confirmWeighTicket(row.id);
     onCreated?.(row.id);
     onClose();
   }
@@ -284,16 +318,35 @@ export function WeighTicketCreateModal({
           <button type="submit" form="weigh-create-form" className="ui-btn-primary">
             {t("common.save")}
           </button>
+          <button type="button" className="ui-btn-primary" onClick={() => void handleSubmit({ preventDefault() {} } as React.FormEvent, true)}>
+            确认并锁定
+          </button>
         </>
       }
     >
       <form id="weigh-create-form" onSubmit={handleSubmit}>
         <FormSection title={t("form.sectionBasic")}>
           <FormFieldGrid>
-            <FormField label={t("fields.bxNo")} hint={t("form.bxNoAutoHint")}>
+            <FormField label={t("fields.customerCategory")}>
+              <OptionField
+                value={customerCategory}
+                onChange={(v) => handleCustomerCategoryChange(v as WeighCustomerCategory)}
+                options={customerCategoryOptions}
+              />
+            </FormField>
+            <FormField
+              label={t("fields.bxNo")}
+              required
+              hint={
+                customerCategory === "retail"
+                  ? t("form.bxNoRetailAutoHint")
+                  : t("form.bxNoAutoHint")
+              }
+            >
               <input
                 className={inputClass}
                 value={bxNo}
+                required
                 readOnly
                 disabled
                 tabIndex={-1}
@@ -312,7 +365,7 @@ export function WeighTicketCreateModal({
               value={date}
               onChange={setDate}
             />
-            <FormField label={t("menu.customers")} required>
+            <FormField label={t("menu.customers")}>
               <SearchableSelect
                 value={customerName}
                 onChange={setCustomerName}
@@ -348,16 +401,8 @@ export function WeighTicketCreateModal({
                     disabled={!saleContractId}
                   />
                 </FormField>
-              </>
-            )}
-            <FormField label={t("menu.materialTypes")} required>
-              <Select
-                value={materialSummary}
-                onChange={setMaterialSummary}
-                options={materialOptions}
-                disabled={contractLocked}
-              />
-            </FormField>
+                </>
+              )}
             <FormField label={t("fields.plate")}>
               <input
                 className={inputClass}
@@ -366,56 +411,66 @@ export function WeighTicketCreateModal({
                 placeholder={t("form.platePlaceholder")}
               />
             </FormField>
-            {contractLocked ? (
-              <FormFieldFull>
-                <p className="text-xs text-muted">{t("form.contractLinkedHint")}</p>
-              </FormFieldFull>
-            ) : null}
-          </FormFieldGrid>
-        </FormSection>
-        <FormSection title={t("form.sectionWeigh")} variant="panel">
-          <FormFieldGrid>
-            <FormField label={t("fields.gross")} required>
-              <InputWithUnit
-                type="number"
-                value={grossKg}
-                onChange={(e) => setGrossKg(e.target.value)}
-                unit={t("form.unitKg")}
-              />
-            </FormField>
-            <FormField label={t("fields.tare")} required>
-              <InputWithUnit
-                type="number"
-                value={tareKg}
-                onChange={(e) => setTareKg(e.target.value)}
-                unit={t("form.unitKg")}
-              />
-            </FormField>
-            <FormField label={t("fields.deduction")}>
-              <InputWithUnit
-                type="number"
-                value={deductionKg}
-                onChange={(e) => setDeductionKg(e.target.value)}
-                unit={t("form.unitKg")}
-              />
-            </FormField>
-            <FormField label={t("fields.unitPrice")} required>
-              <InputWithUnit
-                type="number"
-                step="0.01"
-                value={unitPrice}
-                onChange={(e) => setUnitPrice(e.target.value)}
-                unit={moneyUnits.moneyPerKg}
+            <FormField label={t("menu.materialTypes")} required>
+              <Select
+                value={materialSummary}
+                onChange={setMaterialSummary}
+                options={materialOptions}
                 disabled={contractLocked}
               />
             </FormField>
-            <FormField label={t("fields.net")}>
-              <div className="ui-form-readonly tabular-nums">{formatKg(netKg)}</div>
-            </FormField>
-            <FormField label={t("fields.amount")}>
-              <div className="ui-form-readonly tabular-nums">{formatMoney(amount)}</div>
-            </FormField>
           </FormFieldGrid>
+          <FormFieldFull>
+            <FormSection title={t("form.sectionWeigh")} variant="panel">
+              <FormFieldGrid>
+                <FormField label={t("fields.gross")} required>
+                  <InputWithUnit
+                    type="number"
+                    value={grossKg}
+                    onChange={(e) => setGrossKg(e.target.value)}
+                    unit={t("form.unitKg")}
+                  />
+                </FormField>
+                <FormField label={t("fields.tare")} required>
+                  <InputWithUnit
+                    type="number"
+                    value={tareKg}
+                    onChange={(e) => setTareKg(e.target.value)}
+                    unit={t("form.unitKg")}
+                  />
+                </FormField>
+                <FormField label={t("fields.deduction")}>
+                  <InputWithUnit
+                    type="number"
+                    value={deductionKg}
+                    onChange={(e) => setDeductionKg(e.target.value)}
+                    unit={t("form.unitKg")}
+                  />
+                </FormField>
+                <FormField label={t("fields.unitPrice")} required>
+                  <InputWithUnit
+                    type="number"
+                    step="0.01"
+                    value={unitPrice}
+                    onChange={(e) => setUnitPrice(e.target.value)}
+                    unit={moneyUnits.moneyPerKg}
+                    disabled={contractLocked}
+                  />
+                </FormField>
+                <FormField label={t("fields.net")}>
+                  <div className="ui-form-readonly tabular-nums">{formatKg(netKg)}</div>
+                </FormField>
+                <FormField label={t("fields.amount")}>
+                  <div className="ui-form-readonly tabular-nums">{formatMoney(amount)}</div>
+                </FormField>
+              </FormFieldGrid>
+            </FormSection>
+          </FormFieldFull>
+          {contractLocked ? (
+            <FormFieldFull>
+              <p className="text-xs text-muted">{t("form.contractLinkedHint")}</p>
+            </FormFieldFull>
+          ) : null}
         </FormSection>
         <FormSection title={t("form.sectionOptional")}>
           <FormField label={t("form.remarkOptional")}>
@@ -445,12 +500,13 @@ export function WeighTicketDetailModal({
 }) {
   const { t } = useI18n();
   const confirm = useConfirm();
-  const { weighTickets, updateWeighTicket, customers, purchaseContracts, saleContracts, materialTypes } =
+  const { weighTickets, updateWeighTicket, confirmWeighTicket, customers, purchaseContracts, saleContracts, materialTypes } =
     useMockStore();
   const moneyUnits = useMoneyUnits();
   const row = id ? weighTickets.find((ticket) => ticket.id === id) : undefined;
 
   const [bxNo, setBxNo] = useState("");
+  const [customerCategory, setCustomerCategory] = useState<WeighCustomerCategory>("customer");
   const [contractNo, setContractNo] = useState(NO_CONTRACT);
   const [saleContractId, setSaleContractId] = useState(NO_CONTRACT);
   const [saleContractLineId, setSaleContractLineId] = useState(NO_CONTRACT);
@@ -466,11 +522,19 @@ export function WeighTicketDetailModal({
   const [remarks, setRemarks] = useState("");
   const [status, setStatus] = useState<TicketStatus>("normal");
   const [saved, setSaved] = useState(false);
-
+  const locked = readOnly || row?.status !== "pending";
   const directionOptions = useMemo(
     () => [
       { value: "purchase", label: t("common.purchase") },
       { value: "sale", label: t("common.sale") },
+    ],
+    [t],
+  );
+
+  const customerCategoryOptions = useMemo(
+    () => [
+      { value: "retail", label: t("fields.customerCategoryRetail") },
+      { value: "customer", label: t("fields.customerCategoryCustomer") },
     ],
     [t],
   );
@@ -499,6 +563,7 @@ export function WeighTicketDetailModal({
   useEffect(() => {
     if (!open || !row) return;
     setBxNo(row.bxNo);
+    setCustomerCategory(row.customerCategory ?? "customer");
     setDirection(row.direction);
     setDate(row.date);
     setCustomerName(row.customerName);
@@ -517,6 +582,13 @@ export function WeighTicketDetailModal({
     setStatus(row.status);
     setSaved(false);
   }, [open, row]);
+
+  function handleDetailCustomerCategoryChange(next: WeighCustomerCategory) {
+    setCustomerCategory(next);
+    if (next === "retail" && row?.customerCategory !== "retail") {
+      setBxNo(nextRetailWeighTicketBxNo(weighTickets, date));
+    }
+  }
 
   const netKg = useMemo(() => {
     return Math.max(
@@ -607,7 +679,7 @@ export function WeighTicketDetailModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (readOnly) return;
+    if (locked) return;
     if (!row) return;
     if (direction === "sale" && saleContractId && !saleContractLineId) return;
     const saleLine = saleContract?.lines.find((l) => l.id === saleContractLineId);
@@ -631,10 +703,13 @@ export function WeighTicketDetailModal({
         });
       }
     }
+    const nextBxNo = bxNo;
     updateWeighTicket(row.id, {
+      bxNo: nextBxNo,
       direction,
       date,
-      customerName,
+      customerCategory,
+      customerName: customerName.trim() || "-",
       plate: plate || "-",
       materialSummary,
       grossKg: Number(grossKg) || 0,
@@ -652,6 +727,15 @@ export function WeighTicketDetailModal({
     setSaved(true);
   }
 
+  async function handleConfirm() {
+    if (!row || locked) return;
+    const ok = await confirm({ title: "确认过磅", message: "确认后过磅台账将锁定，结算单才可以关联。后续修改只能走纠错删除。", confirmLabel: "确认并锁定" });
+    if (ok) {
+      confirmWeighTicket(row.id);
+      onClose();
+    }
+  }
+
   return (
     <Modal
       open={open}
@@ -664,11 +748,12 @@ export function WeighTicketDetailModal({
             <button type="button" className="ui-btn-secondary" onClick={onClose}>
               {t("common.close")}
             </button>
-            {!readOnly ? (
+            {!locked ? (
             <button type="submit" form="weigh-edit-form" className="ui-btn-primary">
               {t("common.save")}
             </button>
           ) : null}
+            {!locked ? <button type="button" className="ui-btn-primary" onClick={() => void handleConfirm()}>确认并锁定</button> : null}
           </>
         ) : (
           <button type="button" className="ui-btn-secondary" onClick={onClose}>
@@ -681,12 +766,30 @@ export function WeighTicketDetailModal({
         <p className="text-sm text-muted">{t("common.notFoundHint")}</p>
       ) : (
         <form id="weigh-edit-form" onSubmit={handleSubmit}>
+          <fieldset disabled={locked} className="min-w-0 space-y-4 border-0 p-0">
           <FormSection title={t("form.sectionBasic")}>
             <FormFieldGrid>
-              <FormField label={t("fields.bxNo")}>
+              <FormField label={t("fields.customerCategory")}>
+                <OptionField
+                  value={customerCategory}
+                  onChange={(v) => handleDetailCustomerCategoryChange(v as WeighCustomerCategory)}
+                  options={customerCategoryOptions}
+                  disabled={locked}
+                />
+              </FormField>
+              <FormField
+                label={t("fields.bxNo")}
+                required
+                hint={
+                  customerCategory === "retail"
+                    ? t("form.bxNoRetailAutoHint")
+                    : t("form.bxNoAutoHint")
+                }
+              >
                 <input
                   className={inputClass}
                   value={bxNo}
+                  required
                   readOnly
                   disabled
                   tabIndex={-1}
@@ -710,7 +813,7 @@ export function WeighTicketDetailModal({
                 value={date}
                 onChange={setDate}
               />
-              <FormField label={t("menu.customers")} required>
+              <FormField label={t("menu.customers")}>
                 <SearchableSelect
                   value={customerName}
                   onChange={setCustomerName}
@@ -748,27 +851,76 @@ export function WeighTicketDetailModal({
                   </FormField>
                 </>
               )}
-              <FormField label={t("menu.materialTypes")} required>
-                <Select
-                  value={materialSummary}
-                  onChange={setMaterialSummary}
-                  options={materialOptions}
-                  disabled={contractLocked}
-                />
-              </FormField>
-              <FormField label={t("fields.plate")}>
-                <input
-                  className={inputClass}
-                  value={plate}
-                  onChange={(e) => setPlate(e.target.value)}
-                  placeholder={t("form.platePlaceholder")}
-                />
-              </FormField>
+            <FormField label={t("fields.plate")}>
+              <input
+                className={inputClass}
+                value={plate}
+                onChange={(e) => setPlate(e.target.value)}
+                placeholder={t("form.platePlaceholder")}
+              />
+            </FormField>
+            <FormField label={t("menu.materialTypes")} required>
+              <Select
+                value={materialSummary}
+                onChange={setMaterialSummary}
+                options={materialOptions}
+                disabled={contractLocked}
+              />
+            </FormField>
+          </FormFieldGrid>
+            <FormFieldFull>
+              <FormSection title={t("form.sectionWeigh")} variant="panel">
+                <FormFieldGrid>
+                  <FormField label={t("fields.gross")} required>
+                    <InputWithUnit
+                      type="number"
+                      value={grossKg}
+                      onChange={(e) => setGrossKg(e.target.value)}
+                      unit={t("form.unitKg")}
+                    />
+                  </FormField>
+                  <FormField label={t("fields.tare")} required>
+                    <InputWithUnit
+                      type="number"
+                      value={tareKg}
+                      onChange={(e) => setTareKg(e.target.value)}
+                      unit={t("form.unitKg")}
+                    />
+                  </FormField>
+                  <FormField label={t("fields.deduction")}>
+                    <InputWithUnit
+                      type="number"
+                      value={deductionKg}
+                      onChange={(e) => setDeductionKg(e.target.value)}
+                      unit={t("form.unitKg")}
+                    />
+                  </FormField>
+                  <FormField label={t("fields.unitPrice")} required>
+                    <InputWithUnit
+                      type="number"
+                      step="0.01"
+                      value={unitPrice}
+                      onChange={(e) => setUnitPrice(e.target.value)}
+                      unit={moneyUnits.moneyPerKg}
+                      disabled={contractLocked}
+                    />
+                  </FormField>
+                  <FormField label={t("fields.net")}>
+                    <div className="ui-form-readonly tabular-nums">{formatKg(netKg)}</div>
+                  </FormField>
+                  <FormField label={t("fields.amount")}>
+                    <div className="ui-form-readonly tabular-nums">{formatMoney(amount)}</div>
+                  </FormField>
+                </FormFieldGrid>
+              </FormSection>
+            </FormFieldFull>
+            <FormFieldGrid>
               <FormField label={t("common.status")}>
                 <OptionField
                   value={status}
                   onChange={(v) => setStatus(v as TicketStatus)}
                   options={ticketStatusOptions}
+                  disabled={readOnly}
                 />
               </FormField>
               {contractLocked ? (
@@ -776,50 +928,6 @@ export function WeighTicketDetailModal({
                   <p className="text-xs text-muted">{t("form.contractLinkedHint")}</p>
                 </FormFieldFull>
               ) : null}
-            </FormFieldGrid>
-          </FormSection>
-          <FormSection title={t("form.sectionWeigh")} variant="panel">
-            <FormFieldGrid>
-              <FormField label={t("fields.gross")} required>
-                <InputWithUnit
-                  type="number"
-                  value={grossKg}
-                  onChange={(e) => setGrossKg(e.target.value)}
-                  unit={t("form.unitKg")}
-                />
-              </FormField>
-              <FormField label={t("fields.tare")} required>
-                <InputWithUnit
-                  type="number"
-                  value={tareKg}
-                  onChange={(e) => setTareKg(e.target.value)}
-                  unit={t("form.unitKg")}
-                />
-              </FormField>
-              <FormField label={t("fields.deduction")}>
-                <InputWithUnit
-                  type="number"
-                  value={deductionKg}
-                  onChange={(e) => setDeductionKg(e.target.value)}
-                  unit={t("form.unitKg")}
-                />
-              </FormField>
-              <FormField label={t("fields.unitPrice")} required>
-                <InputWithUnit
-                  type="number"
-                  step="0.01"
-                  value={unitPrice}
-                  onChange={(e) => setUnitPrice(e.target.value)}
-                  unit={moneyUnits.moneyPerKg}
-                  disabled={contractLocked}
-                />
-              </FormField>
-              <FormField label={t("fields.net")}>
-                <div className="ui-form-readonly tabular-nums">{formatKg(netKg)}</div>
-              </FormField>
-              <FormField label={t("fields.amount")}>
-                <div className="ui-form-readonly tabular-nums">{formatMoney(amount)}</div>
-              </FormField>
             </FormFieldGrid>
           </FormSection>
           <FormSection title={t("form.sectionOptional")}>
@@ -832,6 +940,13 @@ export function WeighTicketDetailModal({
               />
             </FormField>
           </FormSection>
+          </fieldset>
+          <CorrectionInfo
+            reason={row.voidReason}
+            actor={row.voidedBy}
+            at={row.voidedAt}
+            batchId={row.reversalBatchId}
+          />
           {saved ? <p className="text-sm text-success">{t("common.saved")}</p> : null}
         </form>
       )}

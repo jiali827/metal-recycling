@@ -48,6 +48,7 @@ export type MessageDict = {
     no: string;
     deleteConfirmTitle: string;
     deleteConfirm: string;
+    correctionDelete: string;
     saved: string;
     saveFailed: string;
     breadcrumb: string;
@@ -102,6 +103,7 @@ export type MessageDict = {
     roles: string;
     settings: string;
     transactions: string;
+    miscCategories: string;
   };
   login: {
     title: string;
@@ -154,6 +156,7 @@ export type MessageDict = {
     cashBalance: string;
     miscIncome: string;
     miscExpense: string;
+    salaryExpense: string;
     arBalance: string;
     apBalance: string;
     colBx: string;
@@ -251,6 +254,20 @@ export type MessageDict = {
     downloadAttachment: string;
     previewLoading: string;
     previewFailed: string;
+    revise: string;
+    reviseHint: string;
+    revisionReasonTitle: string;
+    revisionLockedByWeighing: string;
+    revisionReason: string;
+    revisionReasonPlaceholder: string;
+    revisionReasonRequired: string;
+    revisionHistory: string;
+    revisionHistoryEmpty: string;
+    revisionAt: string;
+    revisionBy: string;
+    revisionCancel: string;
+    revisionSave: string;
+    noRevisionChanges: string;
   };
   weighTickets: {
     title: string;
@@ -360,8 +377,14 @@ export type MessageDict = {
     new: string;
     newSettlement: string;
     newMisc: string;
+    newSalary: string;
+    manageMiscCategories: string;
     categorySettlement: string;
     categoryMisc: string;
+    categorySalary: string;
+    colNo: string;
+    salaryEmployee: string;
+    salaryEmployeeHint: string;
     colCategory: string;
     colMiscKind: string;
     colContract: string;
@@ -379,6 +402,12 @@ export type MessageDict = {
     summaryTitle: string;
     summaryCollapse: string;
     summaryExpand: string;
+    colWaiver: string;
+    waiverAmount: string;
+    waiverReason: string;
+    waiverReasonPlaceholder: string;
+    summaryWaiver: string;
+    settleComposition: string;
   };
   transactions: {
     title: string;
@@ -480,6 +509,15 @@ export type MessageDict = {
     title: string;
     description: string;
     new: string;
+  };
+  miscCategories: {
+    title: string;
+    description: string;
+    new: string;
+    colName: string;
+    colDefaultType: string;
+    colRecordCount: string;
+    deleteHasRecordsWarning: string;
   };
   employees: {
     title: string;
@@ -593,6 +631,9 @@ export type MessageDict = {
     open: string;
     partial: string;
     settled: string;
+    pending: string;
+    confirmed: string;
+    reversed: string;
   };
   roles_names: {
     admin: string;
@@ -633,9 +674,19 @@ export type MessageDict = {
   };
   fields: {
     bxNo: string;
+    customerCategory: string;
+    customerCategoryRetail: string;
+    customerCategoryCustomer: string;
     plate: string;
     customer: string;
     material: string;
+    materialMetalKind: string;
+    materialMetalIron: string;
+    materialMetalAluminum: string;
+    materialMetalCopper: string;
+    materialMetalOther: string;
+    openingStockKg: string;
+    currentStockKg: string;
     gross: string;
     tare: string;
     deduction: string;
@@ -660,6 +711,7 @@ export type MessageDict = {
   form: {
     selectPlaceholder: string;
     noOptions: string;
+    stockLockedHint: string;
     searchPlaceholder: string;
     ticketSelectPlaceholder: string;
     ticketSearchPlaceholder: string;
@@ -671,6 +723,9 @@ export type MessageDict = {
     relatedSettlementDoc: string;
     keywordArAp: string;
     bxNoAutoHint: string;
+    bxNoRetailAutoHint: string;
+    bxNoManualHint: string;
+    bxNoDuplicate: string;
     paymentSettlementHint: string;
     settleReceivable: string;
     settlePayable: string;
@@ -760,6 +815,9 @@ export type MessageDict = {
     displayName: string;
     email: string;
     emailAccountHint: string;
+    monthlySalary: string;
+    salaryEffectiveDate: string;
+    monthlySalaryHint: string;
     role: string;
     rolesHint: string;
     roleRequired: string;

@@ -6,6 +6,7 @@ export {
 } from "./types";
 export { catalogs } from "./messages";
 export { translate } from "./translate";
+export type { I18nContextValue } from "./provider";
 export {
   I18nProvider,
   useI18n,

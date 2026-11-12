@@ -38,6 +38,7 @@ export const menuItems: MenuItem[] = [
   { href: "/customers", labelKey: "menu.customers", icon: "users", group: "master", moduleId: "customers" },
   { href: "/material-types", labelKey: "menu.materialTypes", icon: "package", group: "master", moduleId: "materialTypes" },
   { href: "/project-types", labelKey: "menu.projectTypes", icon: "folders", group: "master", moduleId: "projectTypes" },
+  { href: "/misc-categories", labelKey: "menu.miscCategories", icon: "receipt", group: "master", moduleId: "miscCategories" },
   { href: "/employees", labelKey: "menu.employees", icon: "idCard", group: "system", moduleId: "employees" },
   { href: "/roles", labelKey: "menu.roles", icon: "shield", group: "system", moduleId: "roles" },
   { href: "/settings/cash", labelKey: "menu.settings", icon: "gear", group: "system", moduleId: "settings" },

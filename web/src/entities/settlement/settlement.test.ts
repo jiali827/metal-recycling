@@ -3,6 +3,8 @@ import {
   buildAllocationSummary,
   settlementStatusFromAmounts,
   extractBxNoFromAllocation,
+  formatWaiverMoney,
+  paymentEffectiveSettled,
   syncArApFromPayments,
 } from "@/entities/settlement";
 import { calcNetKg, isNetKgValid, lineWeightsMatchTicket } from "@/entities/weigh-ticket/net-kg";
@@ -63,6 +65,88 @@ describe("settlement", () => {
     expect(next[0].settledAmount).toBe(40);
     expect(next[0].balance).toBe(60);
     expect(next[0].status).toBe("partial");
+  });
+
+  // WV02/WV03/WV04：减免计入有效核销额，实收+减免达账面即结清，不产生残差
+  it("counts waiver into effective settled amount (WV03/WV04)", () => {
+    const items: ArApItem[] = [
+      {
+        id: "ar1",
+        settlementDocId: "wsd1",
+        settlementDocNo: "INV-1",
+        customerName: "A",
+        amount: 1000.4,
+        settledAmount: 0,
+        balance: 1000.4,
+        status: "open",
+        date: "2026-08-01",
+        createdAt: "",
+        updatedAt: "",
+      },
+    ];
+    const payments: PaymentRecord[] = [
+      {
+        id: "p1",
+        date: "2026-08-02T10:00",
+        category: "settlement",
+        type: "receipt",
+        method: "現金",
+        amount: 1000,
+        waiverAmount: 0.4,
+        waiverReason: "抹零",
+        counterparty: "A",
+        allocationSummary: "核销 INV-1（减免 0.4）",
+        settlementDocId: "wsd1",
+        settlementDocNo: "INV-1",
+        createdAt: "",
+        updatedAt: "",
+      },
+    ];
+    expect(paymentEffectiveSettled(payments[0])).toBe(1000.4);
+    const next = syncArApFromPayments(items, payments, ["wsd1"], "receipt");
+    expect(next[0].settledAmount).toBeCloseTo(1000.4, 6);
+    expect(next[0].balance).toBe(0);
+    expect(next[0].status).toBe("settled");
+  });
+
+  // WV08：删除/冲销核销时减免随记录回退（重新同步即回滚）
+  it("rolls back waiver when payment removed (WV08)", () => {
+    const items: ArApItem[] = [
+      {
+        id: "ar1",
+        settlementDocId: "wsd1",
+        settlementDocNo: "INV-1",
+        customerName: "A",
+        amount: 1000.4,
+        settledAmount: 1000.4,
+        balance: 0,
+        status: "settled",
+        date: "2026-08-01",
+        createdAt: "",
+        updatedAt: "",
+      },
+    ];
+    const next = syncArApFromPayments(items, [], ["wsd1"], "receipt");
+    expect(next[0].settledAmount).toBe(0);
+    expect(next[0].balance).toBeCloseTo(1000.4, 6);
+    expect(next[0].status).toBe("open");
+  });
+
+  it("summarizes waiver in allocation text", () => {
+    // 实收+减免 足额 → 核销 + 减免后缀
+    expect(buildAllocationSummary("INV-1", 1000, 1000.4, 0.4)).toBe(
+      "核销 INV-1（减免 0.4）",
+    );
+    // 部分核销（含减免仍不足额）
+    expect(buildAllocationSummary("INV-1", 100, 1000.4, 0.4)).toContain("部分核销");
+    // 无减免不加后缀
+    expect(buildAllocationSummary("INV-1", 1000.4, 1000.4, 0)).not.toContain("减免");
+  });
+
+  it("formats waiver money without trailing zeros", () => {
+    expect(formatWaiverMoney(0.4)).toBe("0.4");
+    expect(formatWaiverMoney(1)).toBe("1");
+    expect(formatWaiverMoney(1.25)).toBe("1.25");
   });
 });
 

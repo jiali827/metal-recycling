@@ -108,5 +108,6 @@ export function resolveModuleIdFromPath(pathname: string): ModuleId | null {
   if (pathname.startsWith("/settlement-docs")) return "weighTickets";
   if (pathname.startsWith("/receivables")) return "payments";
   if (pathname.startsWith("/payables")) return "payments";
+  if (pathname.startsWith("/misc-categories")) return "miscCategories";
   return null;
 }

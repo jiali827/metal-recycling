@@ -23,7 +23,8 @@ import {
 } from "@/shared/lib/direction-colors";
 import { formatKg, formatMoney } from "@/shared/lib/format";
 import { formatWeighDateTime } from "@/shared/lib/date";
-import { localizeMiscKind, useI18n } from "@/shared/i18n";
+import { paymentMiscCategoryLabel } from "@/entities/payment/misc-category";
+import { useI18n } from "@/shared/i18n";
 import {
   contractStatusLabel,
   fieldLabels,
@@ -193,9 +194,15 @@ function InfoCell({
   );
 }
 
-function InfoGrid({ children }: { children: ReactNode }) {
+function InfoGrid({
+  children,
+  className = "sm:grid-cols-2",
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   return (
-    <dl className="grid gap-x-8 sm:grid-cols-2">{children}</dl>
+    <dl className={`grid gap-x-8 ${className}`}>{children}</dl>
   );
 }
 
@@ -241,6 +248,7 @@ export function ContractTracePanel({
     purchaseContracts,
     saleContracts,
     weighSettlementDocs,
+    paymentMiscCategories,
   } = useMockStore();
 
   const allContracts = useMemo(
@@ -441,13 +449,16 @@ export function ContractTracePanel({
 
           <div className="pt-3" role="tabpanel">
           {activeTab === "basic" ? (
-            <div className="w-full max-w-3xl">
+            <div className="w-full">
             <TabContentCard
               toolbar={<BasicInfoToolbar />}
             >
-              <div className="space-y-5">
-                <TraceInfoBlock title={t("transactions.contractSection")}>
-                  <InfoGrid>
+              <div className="grid gap-6 lg:grid-cols-2 lg:gap-0">
+                <TraceInfoBlock
+                  title={t("transactions.contractSection")}
+                  className="lg:pr-8"
+                >
+                  <InfoGrid className="grid-cols-1">
                     <InfoCell label={t("fields.contractNo")}>{contract.no}</InfoCell>
                     <InfoCell label={t("fields.signedDate")}>{contract.date}</InfoCell>
                     <InfoCell label={t("common.type")}>
@@ -499,7 +510,7 @@ export function ContractTracePanel({
 
                 <TraceInfoBlock
                   title={t("transactions.customerSection")}
-                  className="border-t border-border/60 pt-5"
+                  className="border-t border-border/60 pt-5 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0"
                 >
                   {!customer ? (
                     <div className="rounded-[var(--radius-control)] border border-dashed border-border bg-chip/30 px-3 py-6 text-center">
@@ -508,7 +519,7 @@ export function ContractTracePanel({
                       </p>
                     </div>
                   ) : (
-                    <InfoGrid>
+                    <InfoGrid className="grid-cols-1">
                       <InfoCell label={t("customers.customerNo")}>{customer.customerNo}</InfoCell>
                       <InfoCell label={t("common.name")}>{customer.name}</InfoCell>
                       <InfoCell label={t("common.category")}>
@@ -799,10 +810,12 @@ export function ContractTracePanel({
                               </StatusBadge>
                             </td>
                             <td className="py-2.5 pr-3">
-                              {p.miscKind ? (
-                                <span className="text-sm">{localizeMiscKind(p.miscKind)}</span>
+                              {p.category === "misc" ? (
+                                <span className="text-sm">
+                                  {paymentMiscCategoryLabel(p, paymentMiscCategories)}
+                                </span>
                               ) : (
-                                <span className="text-muted">-</span>
+                                <span className="text-muted">—</span>
                               )}
                             </td>
                             <td className="py-2.5 pr-3">

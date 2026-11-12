@@ -11,6 +11,7 @@ export {
   isTicketLinkedToContract,
   listEligibleContracts,
   listEligibleTickets,
+  resolveContractFromTickets,
   ticketMatchesContract,
   type SettlementContractRef,
 } from "./eligible";

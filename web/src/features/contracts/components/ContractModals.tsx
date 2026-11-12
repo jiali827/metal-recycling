@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Trash } from "@phosphor-icons/react";
 import { Modal } from "@/shared/ui/Modal";
+import { useConfirm } from "@/shared/ui/ConfirmDialog";
 import {
   DatePicker,
   FormField,
@@ -23,6 +24,7 @@ import { todayISO } from "@/shared/lib/date";
 import { useMoneyUnits } from "@/shared/lib/use-money-units";
 import { useMockStore } from "@/data/mock/store";
 import { useI18n } from "@/shared/i18n";
+import { useAuth } from "@/features/auth/provider";
 import {
   ensureSaleLineAmounts,
 } from "@/entities/contract/form";
@@ -42,7 +44,16 @@ import {
   purchaseValidityTone,
   saleFulfillmentTone,
 } from "@/entities/contract/status";
+import {
+  buildContractRevision,
+  contractHasActiveWeighings,
+  diffPurchaseContract,
+  diffSaleContract,
+  type PurchaseRevisionInput,
+  type SaleRevisionInput,
+} from "@/entities/contract/revision";
 import { StatusBadge } from "@/shared/ui/StatusBadge";
+import { CorrectionInfo } from "@/features/correction/components/CorrectionInfo";
 import type {
   PurchaseContractLine,
   PurchaseContractStatus,
@@ -77,10 +88,12 @@ function saleFulfillmentText(
 function ContractModalSplit({
   attachment,
   onAttachmentChange,
+  disabled = false,
   children,
 }: {
   attachment: ContractAttachmentValue | null;
   onAttachmentChange: (value: ContractAttachmentValue | null) => void;
+  disabled?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -93,7 +106,9 @@ function ContractModalSplit({
         />
       </div>
       <div className="ui-scrollbar-overlay ui-scrollbar-hidden space-y-4 lg:min-h-0 lg:overflow-y-auto lg:pl-1.5 lg:pr-1">
-        {children}
+        <fieldset disabled={disabled} className="min-w-0 space-y-4 border-0 p-0">
+          {children}
+        </fieldset>
       </div>
     </div>
   );
@@ -148,8 +163,10 @@ export function PurchaseContractCreateModal({
   onCreated?: (id: string) => void;
 }) {
   const { t } = useI18n();
+  const confirm = useConfirm();
   const {
     addPurchaseContract,
+    confirmPurchaseContract,
     purchaseContracts,
     customers,
     projectTypes,
@@ -159,7 +176,7 @@ export function PurchaseContractCreateModal({
   const [customerId, setCustomerId] = useState("");
   const [contactName, setContactName] = useState("");
   const [project, setProject] = useState("");
-  const [status, setStatus] = useState<PurchaseContractStatus>("active");
+  const [status, setStatus] = useState<PurchaseContractStatus>("draft");
   const [quotedOn, setQuotedOn] = useState("");
   const [validUntil, setValidUntil] = useState("");
   const [remarks, setRemarks] = useState("");
@@ -182,7 +199,7 @@ export function PurchaseContractCreateModal({
     setCustomerId("");
     setContactName("");
     setProject("");
-    setStatus("active");
+    setStatus("draft");
     setQuotedOn(quoted);
     setValidUntil("");
     setRemarks("");
@@ -207,8 +224,7 @@ export function PurchaseContractCreateModal({
     if (next) setNoError("");
   }, [open, quotedOn, purchaseContracts, tenant.abbr]);
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function saveContract(shouldConfirm = false) {
     if (lines.length === 0 || lines.some((l) => !(l.materialTypeId || l.materialName.trim()))) return;
     const assignedNo = nextPurchaseContractNo(purchaseContracts, {
       abbr: tenant.abbr,
@@ -217,6 +233,10 @@ export function PurchaseContractCreateModal({
     if (!assignedNo) {
       setNoError(t("contracts.purchaseNoNeedAbbr"));
       return;
+    }
+    if (shouldConfirm) {
+      const ok = await confirm({ title: "确认合同", message: "确认后合同将锁定，过磅台账才可以关联合同。后续修改只能走纠错删除。", confirmLabel: "确认并锁定" });
+      if (!ok) return;
     }
     const customer = customers.find((c) => c.id === customerId);
     const row = addPurchaseContract({
@@ -234,9 +254,12 @@ export function PurchaseContractCreateModal({
       attachmentName: attachment?.fileName,
       attachmentDataUrl: attachment?.dataUrl,
     });
+    if (shouldConfirm) confirmPurchaseContract(row.id);
     onCreated?.(row.id);
     onClose();
   }
+
+  function handleSubmit(e: React.FormEvent) { e.preventDefault(); void saveContract(false); }
 
   return (
     <Modal
@@ -252,6 +275,9 @@ export function PurchaseContractCreateModal({
           </button>
           <button type="submit" form="purchase-contract-create" className="ui-btn-primary">
             {t("common.save")}
+          </button>
+          <button type="button" className="ui-btn-primary" onClick={() => void saveContract(true)}>
+            确认并锁定
           </button>
         </>
       }
@@ -356,7 +382,9 @@ export function PurchaseContractDetailModal({
   readOnly?: boolean;
 }) {
   const { t } = useI18n();
-  const { purchaseContracts, customers, projectTypes, updatePurchaseContract } = useMockStore();
+  const confirm = useConfirm();
+  const { purchaseContracts, customers, projectTypes, updatePurchaseContract, confirmPurchaseContract, weighTickets } = useMockStore();
+  const { user } = useAuth();
   const row = id ? purchaseContracts.find((c) => c.id === id) : undefined;
   const [no, setNo] = useState("");
   const [customerId, setCustomerId] = useState("");
@@ -369,6 +397,17 @@ export function PurchaseContractDetailModal({
   const [lines, setLines] = useState<PurchaseContractLine[]>([]);
   const [attachment, setAttachment] = useState<ContractAttachmentValue | null>(null);
   const [saved, setSaved] = useState(false);
+  const [revisionMode, setRevisionMode] = useState(false);
+  const [revisionReasonOpen, setRevisionReasonOpen] = useState(false);
+  const locked = readOnly || row?.status !== "draft";
+  const formDisabled = locked && !revisionMode;
+  /** 已产生有效过磅记录的合同禁止变更（价格正源已落磅单） */
+  const hasWeighings = useMemo(
+    () => (row ? contractHasActiveWeighings(weighTickets, "purchase", row) : false),
+    [weighTickets, row],
+  );
+  const canRevise = !readOnly && !!row && row.status !== "draft" && row.status !== "void" && !hasWeighings;
+  const revisionLockedHint = !readOnly && !!row && row.status !== "draft" && row.status !== "void" && hasWeighings;
 
   const priceModeOptions = useMemo(
     () => [
@@ -379,8 +418,8 @@ export function PurchaseContractDetailModal({
     [t],
   );
 
-  useEffect(() => {
-    if (!open || !row) return;
+  const syncFromRow = useCallback(() => {
+    if (!row) return;
     setNo(row.no);
     setCustomerId(row.customerId);
     setContactName(row.contactName ?? "");
@@ -396,11 +435,18 @@ export function PurchaseContractDetailModal({
         : null,
     );
     setSaved(false);
-  }, [open, row]);
+    setRevisionMode(false);
+    setRevisionReasonOpen(false);
+  }, [row]);
+
+  useEffect(() => {
+    if (!open || !row) return;
+    syncFromRow();
+  }, [open, row, syncFromRow]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (readOnly) return;
+    if (locked) return;
     if (!row || lines.length === 0) return;
     const customer = customers.find((c) => c.id === customerId);
     updatePurchaseContract(row.id, {
@@ -418,6 +464,61 @@ export function PurchaseContractDetailModal({
       attachmentDataUrl: attachment?.dataUrl,
     });
     setSaved(true);
+  }
+
+  async function handleConfirm() {
+    if (!row || locked) return;
+    const ok = await confirm({ title: "确认合同", message: "确认后合同将锁定，后续修改只能走纠错删除。", confirmLabel: "确认并锁定" });
+    if (ok) {
+      confirmPurchaseContract(row.id);
+      onClose();
+    }
+  }
+
+  /** 由变更原因弹窗回调：返回错误文案（留在弹窗内提示）或 undefined（成功） */
+  function submitRevision(rawReason: string): string | undefined {
+    if (!row || !revisionMode) return undefined;
+    const reason = rawReason.trim();
+    if (!reason) return t("contracts.revisionReasonRequired");
+    const customer = customers.find((c) => c.id === customerId);
+    const after: PurchaseRevisionInput = {
+      customerName: customer?.name ?? row.customerName,
+      contactName,
+      project,
+      quotedOn,
+      validUntil,
+      remarks,
+      lines: lines.map((l) => ({
+        id: l.id,
+        materialName: l.materialName,
+        unitPrice: l.unitPrice,
+        priceMode: l.priceMode,
+        lineRemark: l.lineRemark,
+      })),
+    };
+    const changes = diffPurchaseContract(row, after, t);
+    if (changes.length === 0) {
+      return t("contracts.noRevisionChanges");
+    }
+    const revision = buildContractRevision(changes, reason, user?.name);
+    updatePurchaseContract(row.id, {
+      no: row.no,
+      customerId,
+      customerName: after.customerName,
+      contactName: contactName || undefined,
+      project: project || undefined,
+      status,
+      quotedOn,
+      validUntil: validUntil || undefined,
+      lines,
+      remarks: remarks || undefined,
+      attachmentName: attachment?.fileName,
+      attachmentDataUrl: attachment?.dataUrl,
+      revisions: [...(row.revisions ?? []), revision],
+    }, { allowNonDraft: true });
+    setRevisionMode(false);
+    setSaved(false);
+    return undefined;
   }
 
   const customerOptions = customers.map((c) => ({ value: c.id, label: c.name }));
@@ -438,11 +539,34 @@ export function PurchaseContractDetailModal({
             <button type="button" className="ui-btn-secondary" onClick={onClose}>
               {t("common.close")}
             </button>
-            {!readOnly ? (
-            <button type="submit" form="purchase-contract-edit" className="ui-btn-primary">
-              {t("common.save")}
-            </button>
-          ) : null}
+            {revisionMode ? (
+              <>
+                <button type="button" className="ui-btn-secondary" onClick={() => syncFromRow()}>
+                  {t("contracts.revisionCancel")}
+                </button>
+                <button type="button" className="ui-btn-primary" onClick={() => setRevisionReasonOpen(true)}>
+                  {t("contracts.revisionSave")}
+                </button>
+                <RevisionReasonDialog
+                  open={revisionReasonOpen}
+                  onClose={() => setRevisionReasonOpen(false)}
+                  onSubmit={submitRevision}
+                />
+              </>
+            ) : !locked ? (
+              <>
+                <button type="submit" form="purchase-contract-edit" className="ui-btn-primary">
+                  {t("common.save")}
+                </button>
+                <button type="button" className="ui-btn-primary" onClick={() => void handleConfirm()}>确认并锁定</button>
+              </>
+            ) : canRevise ? (
+              <button type="button" className="ui-btn-primary" onClick={() => setRevisionMode(true)}>
+                {t("contracts.revise")}
+              </button>
+            ) : revisionLockedHint ? (
+              <span className="text-xs text-muted">{t("contracts.revisionLockedByWeighing")}</span>
+            ) : null}
           </>
         ) : (
           <button type="button" className="ui-btn-secondary" onClick={onClose}>
@@ -454,8 +578,8 @@ export function PurchaseContractDetailModal({
       {!row ? (
         <p className="text-sm text-muted">{t("common.notFoundHint")}</p>
       ) : (
-        <form id="purchase-contract-edit" onSubmit={handleSubmit} className="flex h-full min-h-0 flex-1 flex-col">
-          <ContractModalSplit attachment={attachment} onAttachmentChange={setAttachment}>
+        <form id="purchase-contract-edit" onSubmit={revisionMode ? (e) => e.preventDefault() : handleSubmit} className="flex h-full min-h-0 flex-1 flex-col">
+          <ContractModalSplit attachment={attachment} onAttachmentChange={setAttachment} disabled={formDisabled}>
             <FormSection title={t("form.contractDetail")}>
               <FormFieldGrid>
                 <FormField
@@ -500,6 +624,7 @@ export function PurchaseContractDetailModal({
                       { value: "active", label: t("contracts.statusEnabled") },
                       { value: "closed", label: t("status.closed") },
                     ]}
+                    disabled={revisionMode}
                     aria-label={t("common.status")}
                   />
                 </FormField>
@@ -529,6 +654,39 @@ export function PurchaseContractDetailModal({
                   onChange={(e) => setRemarks(e.target.value)}
                 />
               </FormField>
+            </FormSection>
+            <CorrectionInfo
+              reason={row.voidReason}
+              actor={row.voidedBy}
+              at={row.voidedAt}
+              batchId={row.reversalBatchId}
+            />
+            <FormSection title={t("contracts.revisionHistory")}>
+              {row.revisions && row.revisions.length > 0 ? (
+                <ul className="space-y-3">
+                  {[...row.revisions].reverse().map((rev) => (
+                    <li key={rev.id} className="rounded-[var(--radius-control)] border border-line bg-chip px-3 py-2">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+                        <span>{t("contracts.revisionAt")}: {rev.revisedAt}</span>
+                        {rev.revisedBy ? <span>{t("contracts.revisionBy")}: {rev.revisedBy}</span> : null}
+                        <span className="text-foreground">{rev.reason}</span>
+                      </div>
+                      <ul className="mt-2 space-y-1 text-sm">
+                        {rev.changes.map((ch, i) => (
+                          <li key={i} className="flex flex-wrap items-center gap-1">
+                            <span className="font-medium">{ch.label}</span>
+                            <span className="text-muted">{ch.from}</span>
+                            <span aria-hidden>→</span>
+                            <span className="text-foreground">{ch.to}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted">{t("contracts.revisionHistoryEmpty")}</p>
+              )}
             </FormSection>
             {saved ? <p className="text-sm text-success">{t("common.saved")}</p> : null}
           </ContractModalSplit>
@@ -677,11 +835,12 @@ export function SaleContractCreateModal({
   onCreated?: (id: string) => void;
 }) {
   const { t } = useI18n();
-  const { addSaleContract, customers, tenant } = useMockStore();
+  const confirm = useConfirm();
+  const { addSaleContract, confirmSaleContract, customers, tenant } = useMockStore();
   const moneyUnits = useMoneyUnits();
   const [no, setNo] = useState("");
   const [customerId, setCustomerId] = useState("");
-  const [status, setStatus] = useState<SaleContractStatus>("active");
+  const [status, setStatus] = useState<SaleContractStatus>("draft");
   const [signedOn, setSignedOn] = useState("");
   const [paymentTerms, setPaymentTerms] = useState("");
   const [fulfillBy, setFulfillBy] = useState("");
@@ -694,7 +853,7 @@ export function SaleContractCreateModal({
     if (!open) return;
     setNo("");
     setCustomerId("");
-    setStatus("active");
+    setStatus("draft");
     setSignedOn(todayISO());
     setPaymentTerms("");
     setFulfillBy("");
@@ -704,13 +863,16 @@ export function SaleContractCreateModal({
     setAttachment(null);
   }, [open]);
 
-  function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function saveContract(shouldConfirm = false) {
     if (
       lines.length === 0 ||
       lines.some((l) => !(l.materialTypeId || l.materialName.trim()) || l.plannedQty <= 0)
     )
       return;
+    if (shouldConfirm) {
+      const ok = await confirm({ title: "确认合同", message: "确认后合同将锁定，过磅台账才可以关联合同。后续修改只能走纠错删除。", confirmLabel: "确认并锁定" });
+      if (!ok) return;
+    }
     const customer = customers.find((c) => c.id === customerId);
     const withAmounts = ensureSaleLineAmounts(lines);
     const row = addSaleContract({
@@ -728,9 +890,12 @@ export function SaleContractCreateModal({
       attachmentName: attachment?.fileName,
       attachmentDataUrl: attachment?.dataUrl,
     });
+    if (shouldConfirm) confirmSaleContract(row.id);
     onCreated?.(row.id);
     onClose();
   }
+
+  function handleSubmit(e: React.FormEvent) { e.preventDefault(); void saveContract(false); }
 
   return (
     <Modal
@@ -746,6 +911,9 @@ export function SaleContractCreateModal({
           </button>
           <button type="submit" form="sale-contract-create" className="ui-btn-primary">
             {t("common.save")}
+          </button>
+          <button type="button" className="ui-btn-primary" onClick={() => void saveContract(true)}>
+            确认并锁定
           </button>
         </>
       }
@@ -851,7 +1019,9 @@ export function SaleContractDetailModal({
   readOnly?: boolean;
 }) {
   const { t } = useI18n();
-  const { saleContracts, customers, updateSaleContract, weighTickets, tenant } = useMockStore();
+  const confirm = useConfirm();
+  const { saleContracts, customers, updateSaleContract, confirmSaleContract, weighTickets, tenant } = useMockStore();
+  const { user } = useAuth();
   const moneyUnits = useMoneyUnits();
   const row = id ? saleContracts.find((c) => c.id === id) : undefined;
   const [no, setNo] = useState("");
@@ -865,9 +1035,20 @@ export function SaleContractDetailModal({
   const [lines, setLines] = useState<SaleContractLine[]>([]);
   const [attachment, setAttachment] = useState<ContractAttachmentValue | null>(null);
   const [saved, setSaved] = useState(false);
+  const [revisionMode, setRevisionMode] = useState(false);
+  const [revisionReasonOpen, setRevisionReasonOpen] = useState(false);
+  const locked = readOnly || row?.status !== "draft";
+  const formDisabled = locked && !revisionMode;
+  /** 已产生有效过磅记录的合同禁止变更（价格正源已落磅单） */
+  const hasWeighings = useMemo(
+    () => (row ? contractHasActiveWeighings(weighTickets, "sale", row) : false),
+    [weighTickets, row],
+  );
+  const canRevise = !readOnly && !!row && row.status !== "draft" && row.status !== "void" && !hasWeighings;
+  const revisionLockedHint = !readOnly && !!row && row.status !== "draft" && row.status !== "void" && hasWeighings;
 
-  useEffect(() => {
-    if (!open || !row) return;
+  const syncFromRow = useCallback(() => {
+    if (!row) return;
     setNo(row.no);
     setCustomerId(row.customerId);
     setStatus(row.status);
@@ -883,7 +1064,14 @@ export function SaleContractDetailModal({
         : null,
     );
     setSaved(false);
-  }, [open, row]);
+    setRevisionMode(false);
+    setRevisionReasonOpen(false);
+  }, [row]);
+
+  useEffect(() => {
+    if (!open || !row) return;
+    syncFromRow();
+  }, [open, row, syncFromRow]);
 
   function lineHasTickets(lineId: string) {
     return weighTickets.some((t) => t.saleContractLineId === lineId);
@@ -891,7 +1079,7 @@ export function SaleContractDetailModal({
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (readOnly) return;
+    if (locked) return;
     if (!row || lines.length === 0) return;
     const customer = customers.find((c) => c.id === customerId);
     const withAmounts = ensureSaleLineAmounts(
@@ -916,6 +1104,67 @@ export function SaleContractDetailModal({
       attachmentDataUrl: attachment?.dataUrl,
     });
     setSaved(true);
+  }
+
+  async function handleConfirm() {
+    if (!row || locked) return;
+    const ok = await confirm({ title: "确认合同", message: "确认后合同将锁定，后续修改只能走纠错删除。", confirmLabel: "确认并锁定" });
+    if (ok) {
+      confirmSaleContract(row.id);
+      onClose();
+    }
+  }
+
+  /** 由变更原因弹窗回调：返回错误文案（留在弹窗内提示）或 undefined（成功） */
+  function submitRevision(rawReason: string): string | undefined {
+    if (!row || !revisionMode) return undefined;
+    const reason = rawReason.trim();
+    if (!reason) return t("contracts.revisionReasonRequired");
+    const customer = customers.find((c) => c.id === customerId);
+    const after: SaleRevisionInput = {
+      customerName: customer?.name ?? row.customerName,
+      paymentTerms,
+      fulfillBy,
+      tolerancePercent: tolerancePercent === "" ? undefined : Number(tolerancePercent),
+      totalAmount: totalAmount === "" ? undefined : Number(totalAmount),
+      signedOn,
+      lines: lines.map((l) => ({
+        id: l.id,
+        materialName: l.materialName,
+        unitPrice: l.unitPrice,
+        plannedQty: l.plannedQty,
+        lineRemark: l.lineRemark,
+      })),
+    };
+    const changes = diffSaleContract(row, after, t);
+    if (changes.length === 0) {
+      return t("contracts.noRevisionChanges");
+    }
+    const withAmounts = ensureSaleLineAmounts(
+      lines.map((l) => ({
+        ...l,
+        fulfilledQty: row.lines.find((x) => x.id === l.id)?.fulfilledQty ?? l.fulfilledQty,
+      })),
+    );
+    const revision = buildContractRevision(changes, reason, user?.name);
+    updateSaleContract(row.id, {
+      no,
+      customerId,
+      customerName: after.customerName,
+      status,
+      signedOn,
+      paymentTerms: paymentTerms || undefined,
+      fulfillBy: fulfillBy || undefined,
+      tolerancePercent: tolerancePercent === "" ? undefined : Number(tolerancePercent),
+      totalAmount: totalAmount === "" ? undefined : Number(totalAmount),
+      currency: tenant.currency,
+      lines: withAmounts,
+      attachmentName: attachment?.fileName,
+      attachmentDataUrl: attachment?.dataUrl,
+      revisions: [...(row.revisions ?? []), revision],
+    }, { allowNonDraft: true });
+    setRevisionMode(false);
+    setSaved(false);
   }
 
   const customerOptions = customers.map((c) => ({ value: c.id, label: c.name }));
@@ -944,11 +1193,34 @@ export function SaleContractDetailModal({
             <button type="button" className="ui-btn-secondary" onClick={onClose}>
               {t("common.close")}
             </button>
-            {!readOnly ? (
-            <button type="submit" form="sale-contract-edit" className="ui-btn-primary">
-              {t("common.save")}
-            </button>
-          ) : null}
+            {revisionMode ? (
+              <>
+                <button type="button" className="ui-btn-secondary" onClick={() => syncFromRow()}>
+                  {t("contracts.revisionCancel")}
+                </button>
+                <button type="button" className="ui-btn-primary" onClick={() => setRevisionReasonOpen(true)}>
+                  {t("contracts.revisionSave")}
+                </button>
+                <RevisionReasonDialog
+                  open={revisionReasonOpen}
+                  onClose={() => setRevisionReasonOpen(false)}
+                  onSubmit={submitRevision}
+                />
+              </>
+            ) : !locked ? (
+              <>
+                <button type="submit" form="sale-contract-edit" className="ui-btn-primary">
+                  {t("common.save")}
+                </button>
+                <button type="button" className="ui-btn-primary" onClick={() => void handleConfirm()}>确认并锁定</button>
+              </>
+            ) : canRevise ? (
+              <button type="button" className="ui-btn-primary" onClick={() => setRevisionMode(true)}>
+                {t("contracts.revise")}
+              </button>
+            ) : revisionLockedHint ? (
+              <span className="text-xs text-muted">{t("contracts.revisionLockedByWeighing")}</span>
+            ) : null}
           </>
         ) : (
           <button type="button" className="ui-btn-secondary" onClick={onClose}>
@@ -960,9 +1232,9 @@ export function SaleContractDetailModal({
       {!row ? (
         <p className="text-sm text-muted">{t("common.notFoundHint")}</p>
       ) : (
-        <form id="sale-contract-edit" onSubmit={handleSubmit} className="flex h-full min-h-0 flex-1 flex-col">
-          <ContractModalSplit attachment={attachment} onAttachmentChange={setAttachment}>
-            {readyHint && status !== "completed" && status !== "closed" ? (
+        <form id="sale-contract-edit" onSubmit={revisionMode ? (e) => e.preventDefault() : handleSubmit} className="flex h-full min-h-0 flex-1 flex-col">
+          <ContractModalSplit attachment={attachment} onAttachmentChange={setAttachment} disabled={formDisabled}>
+            {revisionMode ? null : readyHint && status !== "completed" && status !== "closed" ? (
               <p className="rounded-[var(--radius-control)] bg-brand-soft px-3 py-2 text-sm text-foreground">
                 {t("contracts.readyToCompleteHint")}
               </p>
@@ -1013,6 +1285,7 @@ export function SaleContractDetailModal({
                         { value: "completed", label: t("status.completed") },
                         { value: "closed", label: t("status.closed") },
                       ]}
+                      disabled={revisionMode}
                       aria-label={t("common.status")}
                     />
                   </FormField>
@@ -1043,6 +1316,39 @@ export function SaleContractDetailModal({
                 showFulfilled
                 canRemoveLine={(lineId) => !lineHasTickets(lineId)}
               />
+            </FormSection>
+            <CorrectionInfo
+              reason={row.voidReason}
+              actor={row.voidedBy}
+              at={row.voidedAt}
+              batchId={row.reversalBatchId}
+            />
+            <FormSection title={t("contracts.revisionHistory")}>
+              {row.revisions && row.revisions.length > 0 ? (
+                <ul className="space-y-3">
+                  {[...row.revisions].reverse().map((rev) => (
+                    <li key={rev.id} className="rounded-[var(--radius-control)] border border-line bg-chip px-3 py-2">
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted">
+                        <span>{t("contracts.revisionAt")}: {rev.revisedAt}</span>
+                        {rev.revisedBy ? <span>{t("contracts.revisionBy")}: {rev.revisedBy}</span> : null}
+                        <span className="text-foreground">{rev.reason}</span>
+                      </div>
+                      <ul className="mt-2 space-y-1 text-sm">
+                        {rev.changes.map((ch, i) => (
+                          <li key={i} className="flex flex-wrap items-center gap-1">
+                            <span className="font-medium">{ch.label}</span>
+                            <span className="text-muted">{ch.from}</span>
+                            <span aria-hidden>→</span>
+                            <span className="text-foreground">{ch.to}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted">{t("contracts.revisionHistoryEmpty")}</p>
+              )}
             </FormSection>
             {saved ? <p className="text-sm text-success">{t("common.saved")}</p> : null}
           </ContractModalSplit>
@@ -1242,5 +1548,74 @@ export function ContractDetailModal({
   }
   return (
     <PurchaseContractDetailModal open={open} onClose={onClose} id={id} readOnly={readOnly} />
+  );
+}
+
+/** 变更原因弹窗：点「保存变更」后弹出，必填原因才真正提交 */
+function RevisionReasonDialog({
+  open,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  onClose: () => void;
+  /** 提交回调：返回错误文案则留在弹窗内提示；返回 undefined 表示成功并关闭 */
+  onSubmit: (reason: string) => string | undefined;
+}) {
+  const { t } = useI18n();
+  const [reason, setReason] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (open) {
+      setReason("");
+      setError("");
+    }
+  }, [open]);
+
+  function handleConfirm() {
+    const err = onSubmit(reason);
+    if (err) {
+      setError(err);
+      return;
+    }
+    onClose();
+  }
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={t("contracts.revisionReasonTitle")}
+      size="md"
+      footer={
+        <>
+          <button type="button" className="ui-btn-secondary" onClick={onClose}>
+            {t("common.cancel")}
+          </button>
+          <button type="button" className="ui-btn-primary" onClick={handleConfirm}>
+            {t("contracts.revisionSave")}
+          </button>
+        </>
+      }
+    >
+      <div className="space-y-3">
+        <p className="text-sm text-muted">{t("contracts.reviseHint")}</p>
+        <FormField label={t("contracts.revisionReason")} required>
+          <textarea
+            autoFocus
+            className={inputClass}
+            rows={3}
+            value={reason}
+            onChange={(e) => {
+              setReason(e.target.value);
+              if (error) setError("");
+            }}
+            placeholder={t("contracts.revisionReasonPlaceholder")}
+          />
+        </FormField>
+        {error ? <p className="text-sm text-danger">{error}</p> : null}
+      </div>
+    </Modal>
   );
 }

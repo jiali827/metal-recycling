@@ -1,4 +1,4 @@
-import type { RoleId, PaymentMiscKind } from "@/entities/types";
+import type { RoleId, PaymentMiscKind, WeighCustomerCategory } from "@/entities/types";
 import type { RoleAccessMap } from "@/shared/config/permissions";
 import { PERMISSION_MODULES } from "@/shared/config/permissions";
 import { catalogs } from "./messages";
@@ -115,6 +115,15 @@ export function localizeMiscKind(kind: PaymentMiscKind, locale?: Locale): string
   return form[key] ?? kind;
 }
 
+export function localizeWeighCustomerCategory(
+  category: WeighCustomerCategory,
+  locale?: Locale,
+): string {
+  const fields = (locale ? catalogs[locale] : getActiveMessages()).fields;
+  if (category === "retail") return fields.customerCategoryRetail;
+  return fields.customerCategoryCustomer;
+}
+
 /** @deprecated Prefer getRoleNames() / t('roles_names.*') */
 export const roleNames = new Proxy({} as Record<RoleId, string>, {
   get(_t, prop: string) {
@@ -132,6 +141,7 @@ export function getContractStatusLabel(
     fulfilling: s.fulfilling,
     completed: s.completed,
     closed: s.closed,
+    void: s.void,
     expired: s.expired,
   };
 }
@@ -145,7 +155,7 @@ export const contractStatusLabel = new Proxy({} as Record<string, string>, {
 
 export function getTicketStatusLabel(locale?: Locale): Record<string, string> {
   const s = (locale ? catalogs[locale] : getActiveMessages()).status;
-  return { normal: s.normal, void: s.void };
+  return { pending: s.pending, normal: s.normal, void: s.void };
 }
 
 /** @deprecated Prefer getTicketStatusLabel() */

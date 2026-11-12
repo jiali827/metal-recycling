@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { PencilSimple, Trash } from "@phosphor-icons/react";
+import { ArrowCounterClockwise, Eye, PencilSimple, Trash } from "@phosphor-icons/react";
 import { useI18n, getActiveMessages } from "@/shared/i18n";
 
 export {
@@ -171,16 +171,23 @@ export function RowActions({
   onDetail,
   detailHref,
   onDelete,
+  onCorrection,
+  readOnly = false,
 }: {
   onDetail?: () => void;
   detailHref?: string;
   onDelete?: () => void;
+  onCorrection?: () => void;
+  /** 锁定记录只允许查看，使用眼睛图标而不是编辑图标 */
+  readOnly?: boolean;
 }) {
   const { t } = useI18n();
   const detailClass =
     "flex h-7 w-7 items-center justify-center rounded-[var(--radius-control)] text-muted transition hover:bg-chip hover:text-brand";
   const deleteClass =
     "flex h-7 w-7 items-center justify-center rounded-[var(--radius-control)] text-muted transition hover:bg-red-50 hover:text-danger";
+  const correctionClass =
+    "flex h-7 w-7 items-center justify-center rounded-[var(--radius-control)] text-muted transition hover:bg-amber-50 hover:text-warning";
 
   return (
     <div className="flex items-center justify-end gap-1">
@@ -191,7 +198,7 @@ export function RowActions({
           aria-label={t("common.detail")}
           onClick={(e) => e.stopPropagation()}
         >
-          <PencilSimple size={14} />
+          {readOnly ? <Eye size={14} /> : <PencilSimple size={14} />}
         </Link>
       ) : onDetail ? (
         <button
@@ -203,7 +210,7 @@ export function RowActions({
             onDetail();
           }}
         >
-          <PencilSimple size={14} />
+          {readOnly ? <Eye size={14} /> : <PencilSimple size={14} />}
         </button>
       ) : null}
       {onDelete ? (
@@ -217,6 +224,20 @@ export function RowActions({
           }}
         >
           <Trash size={14} />
+        </button>
+      ) : null}
+      {onCorrection ? (
+        <button
+          type="button"
+          className={correctionClass}
+          aria-label={t("common.correctionDelete")}
+          title={t("common.correctionDelete")}
+          onClick={(e) => {
+            e.stopPropagation();
+            onCorrection();
+          }}
+        >
+          <ArrowCounterClockwise size={14} />
         </button>
       ) : null}
     </div>

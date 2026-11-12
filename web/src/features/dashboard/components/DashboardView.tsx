@@ -23,7 +23,7 @@ import {
 import { formatKg, formatMoney } from "@/shared/lib/format";
 import { useI18n } from "@/shared/i18n";
 import { useMockStore } from "@/data/mock/store";
-import { isMiscPayment } from "@/entities/payment/meta";
+import { isMiscPayment, isSalaryPayment } from "@/entities/payment/meta";
 import type { WeighTicket } from "@/entities/types";
 import {
   addDays,
@@ -160,6 +160,9 @@ export default function DashboardView() {
     const miscExpense = periodPayments
       .filter((payment) => isMiscPayment(payment) && payment.type === "payment")
       .reduce((sum, payment) => sum + payment.amount, 0);
+    const salaryExpense = periodPayments
+      .filter((payment) => isSalaryPayment(payment))
+      .reduce((sum, payment) => sum + payment.amount, 0);
 
     /** 现金结余：截至区间结束日的累计收付（随结束日变化） */
     const receivedToEnd = payments
@@ -197,6 +200,7 @@ export default function DashboardView() {
       paid,
       miscIncome,
       miscExpense,
+      salaryExpense,
       cashBalance: tenant.openingCash + receivedToEnd - paidToEnd,
       arBalance: periodAr.reduce((sum, row) => sum + row.balance, 0),
       apBalance: periodAp.reduce((sum, row) => sum + row.balance, 0),
@@ -662,6 +666,7 @@ export default function DashboardView() {
               paid={stats.paid}
               miscIncome={stats.miscIncome}
               miscExpense={stats.miscExpense}
+              salaryExpense={stats.salaryExpense}
               replayKey={motionKey}
             />
           </SectionCard>

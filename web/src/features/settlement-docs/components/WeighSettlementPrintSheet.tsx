@@ -4,6 +4,7 @@ import { CompanyLogoMark } from "@/shared/ui/CompanyLogo";
 import { formatMoney, formatKg } from "@/shared/lib/format";
 import { useI18n } from "@/shared/i18n";
 import type { Tenant, WeighSettlementDoc } from "@/entities/types";
+import { CorrectionInfo } from "@/features/correction/components/CorrectionInfo";
 
 function formatDocDate(value: string) {
   if (!value) return "";
@@ -126,6 +127,15 @@ export function WeighSettlementPrintSheet({
           <span className="text-black/60">{t("settlementDocs.totalAmount")}</span>
           <strong className="ml-2 tabular-nums">{formatMoney(doc.totalAmount, tenant.currency)}</strong>
         </p>
+      </div>
+
+      <div className="mt-5">
+        <CorrectionInfo
+          reason={doc.voidReason}
+          actor={doc.voidedBy}
+          at={doc.voidedAt}
+          batchId={doc.reversalBatchId}
+        />
       </div>
 
       <div className="mt-14 grid grid-cols-2 gap-10 text-[12px]">

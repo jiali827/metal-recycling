@@ -5,6 +5,7 @@ import type {
   DashboardStats,
   MaterialType,
   PaymentRecord,
+  PaymentMiscCategory,
   ProjectType,
   PurchaseContract,
   RoleDef,
@@ -22,6 +23,7 @@ import {
   COMPANY_NAME_ZH_HANS,
 } from "@/shared/config/company";
 import { seedTimestamps, type RecordTimestamps } from "@/shared/lib/timestamps";
+import { ensurePaymentNos } from "@/entities/payment/no";
 
 function withSeed<T>(rows: T[], day: string): (T & RecordTimestamps)[] {
   return rows.map((row, index) => ({ ...row, ...seedTimestamps(day, index + 1) }));
@@ -109,6 +111,8 @@ const seedUsers: Omit<User, keyof RecordTimestamps>[] = [
     email: "weigh@baoxin.hk",
     roleIds: ["weigh"],
     status: "active",
+    monthlySalary: 18000,
+    salaryEffectiveDate: "2026-01-01",
   },
   {
     id: "u-finance",
@@ -116,6 +120,8 @@ const seedUsers: Omit<User, keyof RecordTimestamps>[] = [
     email: "finance@baoxin.hk",
     roleIds: ["finance"],
     status: "active",
+    monthlySalary: 22000,
+    salaryEffectiveDate: "2026-01-01",
   },
   {
     id: "u-boss",
@@ -123,6 +129,8 @@ const seedUsers: Omit<User, keyof RecordTimestamps>[] = [
     email: "boss@baoxin.hk",
     roleIds: ["boss"],
     status: "active",
+    monthlySalary: 35000,
+    salaryEffectiveDate: "2026-06-01",
   },
 ];
 
@@ -177,15 +185,18 @@ export const customerCategories: CustomerCategory[] = withSeed(
 );
 
 const seedMaterialTypes: Omit<MaterialType, keyof RecordTimestamps>[] = [
-  { id: "m1", name: "AA", forPurchase: true, forSale: true, enabled: true },
-  { id: "m2", name: "A", forPurchase: true, forSale: true, enabled: true },
-  { id: "m3", name: "AB", forPurchase: true, forSale: true, enabled: true },
-  { id: "m4", name: "B", forPurchase: true, forSale: true, enabled: true },
-  { id: "m5", name: "PNS", forPurchase: false, forSale: true, enabled: true },
-  { id: "m6", name: "工字", forPurchase: true, forSale: true, enabled: true },
-  { id: "m7", name: "圓通", forPurchase: true, forSale: false, enabled: true },
-  { id: "m8", name: "圍街", forPurchase: true, forSale: false, enabled: true },
-  { id: "m9", name: "角梯", forPurchase: false, forSale: true, enabled: true },
+  { id: "m1", metalKind: "iron", name: "AA", openingStockKg: 0, currentStockKg: 90, forPurchase: true, forSale: true, enabled: true },
+  { id: "m2", metalKind: "iron", name: "A", openingStockKg: 0, currentStockKg: -190, forPurchase: true, forSale: true, enabled: true },
+  { id: "m3", metalKind: "iron", name: "AB", openingStockKg: 0, currentStockKg: 1437277, forPurchase: true, forSale: true, enabled: true },
+  { id: "m4", metalKind: "iron", name: "B", openingStockKg: 0, currentStockKg: 0, forPurchase: true, forSale: true, enabled: true },
+  { id: "m5", metalKind: "iron", name: "PNS", openingStockKg: 0, currentStockKg: 0, forPurchase: false, forSale: true, enabled: true },
+  { id: "m6", metalKind: "iron", name: "工字", openingStockKg: 0, currentStockKg: 2600, forPurchase: true, forSale: true, enabled: true },
+  { id: "m7", metalKind: "iron", name: "圓通", openingStockKg: 0, currentStockKg: 0, forPurchase: true, forSale: false, enabled: true },
+  { id: "m8", metalKind: "iron", name: "圍街", openingStockKg: 0, currentStockKg: 0, forPurchase: true, forSale: false, enabled: true },
+  { id: "m9", metalKind: "iron", name: "角梯", openingStockKg: 0, currentStockKg: 0, forPurchase: false, forSale: true, enabled: true },
+  { id: "m10", metalKind: "aluminum", name: "AA", openingStockKg: 0, currentStockKg: -448829, forPurchase: true, forSale: true, enabled: true },
+  { id: "m11", metalKind: "copper", name: "紫銅", openingStockKg: 1200, currentStockKg: 864, forPurchase: true, forSale: true, enabled: true },
+  { id: "m12", metalKind: "other", name: "雜料", openingStockKg: 0, currentStockKg: 0, forPurchase: true, forSale: true, enabled: true },
 ];
 
 export const materialTypes: MaterialType[] = withSeed(seedMaterialTypes, "2026-06-25");
@@ -197,6 +208,22 @@ const seedProjectTypes: Omit<ProjectType, keyof RecordTimestamps>[] = [
 ];
 
 export const projectTypes: ProjectType[] = withSeed(seedProjectTypes, "2026-06-25");
+
+const seedPaymentMiscCategories: Omit<PaymentMiscCategory, keyof RecordTimestamps>[] = [
+  { id: "pmc-salary", name: "薪金", defaultType: "payment", enabled: true },
+  { id: "pmc-freight", name: "运费", defaultType: "payment", enabled: true },
+  { id: "pmc-petty-cash", name: "PETTY CASH", defaultType: "payment", enabled: true },
+  { id: "pmc-utilities", name: "水电燃油", defaultType: "payment", enabled: true },
+  { id: "pmc-other-expense", name: "其他开支", defaultType: "payment", enabled: true },
+  { id: "pmc-other-income", name: "其他收入", defaultType: "receipt", enabled: true },
+  { id: "pmc-deposit", name: "账户存入/调拨", defaultType: "receipt", enabled: true },
+  { id: "pmc-other", name: "其他", defaultType: "payment", enabled: true },
+];
+
+export const paymentMiscCategories: PaymentMiscCategory[] = withSeed(
+  seedPaymentMiscCategories,
+  "2026-06-25",
+);
 
 const seedPurchaseContracts: Omit<PurchaseContract, keyof RecordTimestamps>[] = [
   {
@@ -419,7 +446,9 @@ const seedSaleContracts: Omit<SaleContract, keyof RecordTimestamps>[] = [
 export const purchaseContracts: PurchaseContract[] = withSeedQuotedOn(seedPurchaseContracts);
 export const saleContracts: SaleContract[] = withSeedSignedOn(seedSaleContracts);
 
-const seedWeighTickets: Omit<WeighTicket, keyof RecordTimestamps>[] = [
+export const weighTickets: WeighTicket[] = withSeedBizDate(
+  (
+    [
   {
     id: "w1",
     bxNo: "02507",
@@ -641,9 +670,12 @@ const seedWeighTickets: Omit<WeighTicket, keyof RecordTimestamps>[] = [
     contractNo: "SO-2025-0715",
     status: "normal",
   },
-];
-
-export const weighTickets: WeighTicket[] = withSeedBizDate(seedWeighTickets);
+  ] as Omit<WeighTicket, keyof RecordTimestamps | "customerCategory">[]
+  ).map((ticket) => ({
+    ...ticket,
+    customerCategory: "customer" as const,
+  })),
+);
 
 /** 过磅汇总结算单；已确认单对应应收/应付目标 */
 const seedWeighSettlementDocs: Omit<WeighSettlementDoc, keyof RecordTimestamps>[] = [
@@ -950,7 +982,8 @@ const seedPayments: Omit<PaymentRecord, keyof RecordTimestamps>[] = [
     amount: 1180,
     counterparty: "迅昇石油氣",
     allocationSummary: "買石油氣",
-    miscKind: "utilities",
+    miscKindId: "pmc-utilities",
+    miscKindName: "水电燃油",
   },
   {
     id: "p5",
@@ -961,11 +994,12 @@ const seedPayments: Omit<PaymentRecord, keyof RecordTimestamps>[] = [
     amount: 283,
     counterparty: "Sam",
     allocationSummary: "存入現金",
-    miscKind: "deposit",
+    miscKindId: "pmc-deposit",
+    miscKindName: "账户存入/调拨",
   },
 ];
 
-export const payments: PaymentRecord[] = withSeedBizDate(seedPayments);
+export const payments: PaymentRecord[] = ensurePaymentNos(withSeedBizDate(seedPayments));
 
 export const dashboardStats: DashboardStats = {
   salesAmount: 225522,

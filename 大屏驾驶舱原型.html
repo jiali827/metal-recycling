@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>经营驾驶舱 · 大屏原型 v2（主次版式）</title>
+<style>
+  :root{
+    --bg:#0a0f1c; --panel:#121a2e; --panel2:#0f1626; --border:#243049;
+    --text:#e6edf7; --sub:#7e8db0; --line:#1c2740;
+    --accent:#2dd4bf; --accent2:#60a5fa; --up:#34d399; --down:#f87171; --warn:#fbbf24;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;}
+  body{
+    background:radial-gradient(1200px 600px at 50% -10%, #16213b 0%, var(--bg) 60%),var(--bg);
+    color:var(--text);
+    font-family:"Segoe UI","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+    padding:18px;overflow-y:auto;
+  }
+  .screen{display:flex;flex-direction:column;gap:12px;min-height:calc(100vh - 36px);min-width:1560px;}
+
+  /* section label */
+  .seclabel{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--sub);letter-spacing:2px;}
+  .seclabel::before{content:"";width:4px;height:14px;background:var(--accent);border-radius:2px;}
+  .seclabel .note{margin-left:auto;font-size:11px;color:var(--warn);letter-spacing:1px;}
+
+  /* header */
+  .header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);padding-bottom:10px;position:relative;}
+  .header::after{content:"";position:absolute;left:0;bottom:-1px;width:240px;height:2px;background:var(--accent);}
+  .brand{display:flex;align-items:center;gap:12px;}
+  .logo{width:40px;height:40px;border:2px solid var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--accent);font-size:17px;}
+  .brand .name{font-size:18px;font-weight:700;letter-spacing:1px;}
+  .brand .sub{font-size:11px;color:var(--sub);margin-top:2px;}
+  .title{text-align:center;flex:1;}
+  .title h1{font-size:28px;letter-spacing:8px;font-weight:800;}
+  .clock{text-align:right;min-width:220px;}
+  .clock .t{font-size:24px;font-weight:700;font-variant-numeric:tabular-nums;}
+  .clock .d{font-size:12px;color:var(--sub);margin-top:2px;}
+
+  /* PRIMARY kpi */
+  .kpi-row{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:14px;flex:0 0 auto;}
+  .kpi{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--border);border-radius:14px;padding:18px 20px;position:relative;overflow:hidden;}
+  .kpi .lab{font-size:14px;color:var(--sub);letter-spacing:1px;}
+  .kpi .val{font-weight:800;margin-top:10px;font-variant-numeric:tabular-nums;font-size:34px;line-height:1;}
+  .kpi .val .cur{font-size:16px;color:var(--sub);font-weight:600;margin-right:3px;}
+  .kpi .val .u{font-size:16px;color:var(--sub);margin-left:3px;}
+  .kpi .yoy{display:inline-flex;align-items:center;gap:4px;font-size:13px;margin-top:14px;padding:3px 9px;border-radius:20px;background:rgba(52,211,153,.12);color:var(--up);}
+  .kpi .sub{font-size:12px;color:var(--sub);margin-top:12px;}
+  .kpi.primary{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset,0 0 36px rgba(45,212,191,.18);}
+  .kpi.primary .val{font-size:52px;color:var(--accent);}
+  .kpi.primary .badge{position:absolute;top:14px;right:16px;font-size:11px;color:var(--accent);border:1px solid var(--accent);border-radius:10px;padding:1px 8px;letter-spacing:1px;}
+  .up{color:var(--up);}
+
+  /* analysis row */
+  .row{display:grid;gap:14px;flex:0 0 auto;min-height:0;}
+  .row.ana{grid-template-columns:1.7fr 1fr 1fr;height:320px;}
+  .card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--border);border-radius:14px;padding:14px;display:flex;flex-direction:column;min-height:0;}
+  .card h3{font-size:15px;font-weight:700;letter-spacing:1px;margin-bottom:8px;display:flex;align-items:center;gap:8px;}
+  .card h3::before{content:"";width:4px;height:15px;background:var(--accent);border-radius:2px;display:inline-block;}
+  .card .body{flex:1;min-height:0;}
+
+  .gauges{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;height:100%;align-items:center;}
+  .gauge{text-align:center;}
+  .gauge .gp{font-size:20px;font-weight:800;}
+  .gauge .gl{font-size:11px;color:var(--sub);margin-top:3px;}
+
+  .bars{display:flex;flex-direction:column;justify-content:space-around;height:100%;width:100%;gap:6px;}
+  .bars .br{display:flex;align-items:center;gap:12px;}
+  .bars .br .nm{width:70px;flex:0 0 auto;font-weight:700;font-size:16px;display:flex;align-items:center;gap:9px;color:var(--text);}
+  .bars .br .nm .dot{width:13px;height:13px;border-radius:3px;display:inline-block;flex:0 0 auto;}
+  .bars .br .track{flex:1;height:18px;background:var(--panel2);border-radius:9px;overflow:hidden;border:1px solid var(--border);}
+  .bars .br .fill{height:100%;border-radius:9px;}
+  .bars .br .pc{width:58px;flex:0 0 auto;text-align:right;font-weight:800;font-size:19px;font-variant-numeric:tabular-nums;}
+
+  /* flow bars: 各货类出入重量 + 库存 */
+  .flow{display:flex;flex-direction:column;justify-content:space-around;height:100%;width:100%;gap:6px;}
+  .flow .fr{display:flex;align-items:center;gap:10px;}
+  .flow .fr .nm{width:52px;flex:0 0 auto;font-weight:700;font-size:14px;}
+  .flow .fr .track{flex:1;height:16px;background:var(--panel2);border-radius:8px;overflow:hidden;border:1px solid var(--border);display:flex;}
+  .flow .fr .fin{height:100%;background:var(--accent);}
+  .flow .fr .fout{height:100%;background:var(--accent2);}
+  .flow .fr .vals{width:210px;flex:0 0 auto;text-align:right;font-size:12px;color:var(--sub);font-variant-numeric:tabular-nums;}
+  .flow .fr .vals b{color:var(--text);font-weight:700;}
+  .flow .fr .vals .neg{color:var(--down);}
+
+  /* legend */
+  .legend{display:flex;gap:14px;font-size:11px;color:var(--sub);margin:2px 0 4px;flex:0 0 auto;}
+  .legend i{display:inline-block;width:10px;height:3px;border-radius:2px;margin-right:5px;vertical-align:middle;}
+
+  /* three-card row for flow / cumulative charts */
+  .row.duo{grid-template-columns:1.15fr 1fr 1fr;}
+
+  /* bottom row: price + risk */
+  .row.bot{grid-template-columns:1.5fr 1fr 1.7fr;flex:0 0 300px;}
+  .risk{display:grid;grid-template-columns:1fr 1fr;gap:10px;height:100%;align-items:stretch;}
+  .risk .ri{flex:1;background:var(--panel2);border:1px solid var(--border);border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;justify-content:center;}
+  .risk .ri .k{font-size:12px;color:var(--sub);}
+  .risk .ri .v{font-size:18px;font-weight:800;margin-top:6px;font-variant-numeric:tabular-nums;}
+  .risk .ri.alert{border-color:var(--down);box-shadow:0 0 0 1px var(--down) inset;}
+
+  /* ticker */
+  .ticker{height:100%;overflow:hidden;}
+  .ticker table{width:100%;border-collapse:collapse;font-size:11px;}
+  .ticker th{color:var(--sub);font-weight:600;text-align:left;padding:4px 6px;border-bottom:1px solid var(--border);}
+  .ticker td{padding:5px 6px;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums;}
+  .ticker .scroll{animation:scrollUp 18s linear infinite;}
+  @keyframes scrollUp{from{transform:translateY(0);}to{transform:translateY(-50%);}}
+  .pill{font-size:11px;padding:1px 7px;border-radius:10px;border:1px solid var(--border);}
+  .dir-buy{color:var(--accent);} .dir-sell{color:var(--accent2);}
+
+  /* footer: 数据更新时间 */
+  .footer{display:flex;justify-content:flex-end;align-items:center;gap:8px;font-size:12px;color:var(--sub);flex:0 0 auto;}
+  .footer .upd{color:var(--warn);font-weight:700;font-variant-numeric:tabular-nums;}
+  .footer .dot{width:7px;height:7px;border-radius:50%;background:var(--up);box-shadow:0 0 6px var(--up);}
+</style>
+</head>
+<body>
+<div class="screen">
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="brand">
+      <div class="logo">寶</div>
+      <div><div class="name">寶新金屬回收有限公司</div><div class="sub">BAOXIN METAL RECYCLING</div></div>
+    </div>
+    <div class="title"><h1>经 营 驾 驶 舱</h1></div>
+    <div class="clock"><div class="t" id="clock">--:--:--</div><div class="d" id="date">----年--月--日 星期-</div></div>
+  </div>
+
+  <!-- 主指标 -->
+  <div class="seclabel">主指标 · 本月经营 <span class="note">当月 = 自然月（1日至月末） · 模拟数据 · 仅版式确认</span></div>
+  <div class="kpi-row">
+    <div class="kpi primary">
+      <div class="badge">核心</div>
+      <div class="lab">本月毛利</div>
+      <div class="val"><span class="cur">HK$</span>730,000</div>
+      <div class="yoy">▲ 同比 +22.0%</div>
+      <div class="sub">毛利率 8.4%</div>
+    </div>
+    <div class="kpi">
+      <div class="lab">本月销售额</div>
+      <div class="val"><span class="cur">HK$</span>8,650,000</div>
+      <div class="yoy">▲ 同比 +12.4%</div>
+      <div class="sub">经营规模</div>
+    </div>
+    <div class="kpi">
+      <div class="lab">现金结余（时点）</div>
+      <div class="val"><span class="cur">HK$</span>2,340,000</div>
+      <div class="sub">截至今日 · 期初+收−付</div>
+    </div>
+    <div class="kpi">
+      <div class="lab">本月过磅吨位</div>
+      <div class="val">1,280<span class="u"> T</span></div>
+      <div class="yoy">▲ 同比 +9.1%</div>
+      <div class="sub">车次 342 笔</div>
+    </div>
+  </div>
+
+  <!-- 经营分析 -->
+  <div class="seclabel">经营分析</div>
+  <div class="row ana">
+    <div class="card"><h3>销售 vs 采购趋势（年初至今）</h3><div class="body" id="trend"></div></div>
+    <div class="card"><h3>年度目标达成（YTD）</h3><div class="body"><div class="gauges" id="gauges"></div></div></div>
+    <div class="card"><h3>货物类型占比（本月）<span style="margin-left:auto;font-size:11px;color:var(--warn);font-weight:400;letter-spacing:0;">其他 = 空调 / 冰箱等杂物</span></h3><div class="body"><div class="bars" id="donut"></div></div></div>
+  </div>
+
+  <!-- 货类出入 · 库存 · 累计走势（客户新增意见 1/3） -->
+  <div class="seclabel">货类出入 · 库存 · 累计 <span class="note">库存 = 货类档案「当前库存」 · 模拟数据</span></div>
+  <div class="row duo" style="flex:0 0 330px;">
+    <div class="card">
+      <h3>各货类当月出入重量及库存（本月 · 重量 T / 金额 HK$）</h3>
+      <div class="legend"><span><i style="background:var(--accent)"></i>收料（入）</span><span><i style="background:var(--accent2)"></i>出料（出）</span><span>库存取货类档案当前库存 · 负数红色示警</span></div>
+      <div class="body"><div class="flow" id="flow"></div></div>
+    </div>
+    <div class="card">
+      <h3>累计出入重量与月末库存（T，年初至今）</h3>
+      <div class="legend"><span><i style="background:var(--accent)"></i>累计收料</span><span><i style="background:var(--accent2)"></i>累计出料</span><span><i style="background:var(--warn)"></i>月末库存</span></div>
+      <div class="body" id="cumW"></div>
+    </div>
+    <div class="card">
+      <h3>累计出入金额（HK$萬，年初至今）</h3>
+      <div class="legend"><span><i style="background:var(--accent)"></i>累计收料金额</span><span><i style="background:var(--accent2)"></i>累计出料金额</span></div>
+      <div class="body" id="cumA"></div>
+    </div>
+  </div>
+
+  <!-- 行情 + 风控 + 实时流水 -->
+  <div class="seclabel">行情 · 风控 · 实时</div>
+  <div class="row bot">
+    <div class="card"><h3>金属行情走势（近30日）</h3><div class="body" id="price"></div></div>
+    <div class="card"><h3>风控（仅异常高亮）</h3>
+      <div class="body"><div class="risk">
+        <div class="ri"><span class="k">应收余额</span><span class="v">HK$ 321萬</span></div>
+        <div class="ri alert"><span class="k">逾期应收</span><span class="v">HK$ 48萬</span></div>
+        <div class="ri"><span class="k">应付余额</span><span class="v">HK$ 187萬</span></div>
+        <div class="ri"><span class="k">合同履约预警</span><span class="v">6 笔</span></div>
+      </div></div>
+    </div>
+    <div class="card"><h3>今日实时过磅流水</h3>
+      <div class="body ticker">
+        <table>
+          <thead><tr><th>时间</th><th>车牌</th><th>货类</th><th>净重</th><th>金额</th><th>方向</th></tr></thead>
+          <tbody class="scroll" id="tickerBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  <!-- footer: 数据更新时间（客户要求） -->
+  <div class="footer"><span class="dot"></span>数据更新至 <span class="upd" id="upd">--:--</span> · 每 60 秒自动刷新</div>
+
+</div>
+
+<script>
+const sales=[5.2,6.1,5.8,6.9,7.4,6.6,7.1,7.9,8.2,7.6,8.4,8.65].map(v=>v*1e6);
+const purch=[4.8,5.6,5.3,6.3,6.8,6.0,6.5,7.2,7.5,7.0,7.7,7.92].map(v=>v*1e6);
+const targets=[
+  {name:"销售额",ytd:86.5,target:100,unit:"M",yoy:"+11%"},
+  {name:"毛利",ytd:7.3,target:9,unit:"M",yoy:"+19%"},
+  {name:"吨位",ytd:12800,target:15000,unit:"T",yoy:"+8%"}
+];
+const cats=[
+  {name:"铜",pct:38,color:"#2dd4bf"},{name:"铝",pct:26,color:"#60a5fa"},
+  {name:"铁·AA",pct:16,color:"#94a3b8"},{name:"铁·A",pct:9,color:"#a8b6cf"},
+  {name:"铁·B",pct:5,color:"#bfc9da"},{name:"其他",pct:6,color:"#64748b"}
+];
+const priceDays=Array.from({length:30},(_,i)=>i+1);
+const copper=priceDays.map((d,i)=>62000+Math.sin(i/3)*1800+i*120);
+const alum=priceDays.map((d,i)=>18500+Math.cos(i/4)*600+i*40);
+const tickets=[
+  ["11:42:05","粤B·6F2K9","铜",8420,52130,"buy"],["11:38:51","沪C·8K3P1","铝",5210,31850,"sell"],
+  ["11:35:22","粤A·2D9X7","空调",3680,44200,"buy"],["11:31:40","浙B·5T1L8","铁·AA",11200,15680,"sell"],
+  ["11:28:09","粤E·9R6M2","铜",7650,47390,"buy"],["11:24:33","苏A·3W7N4","铝",4980,30410,"sell"],
+  ["11:20:18","粤B·1Q5H6","冰箱",3120,37440,"buy"],["11:16:55","闽D·7C2B9","铁·A",9840,13780,"sell"]
+];
+const fmt=n=>n.toLocaleString("en-US");
+function lineChart(el,series){
+  const W=600,H=260,pad=30;
+  const all=series.flatMap(s=>s.data);
+  const max=Math.max(...all)*1.1,min=Math.min(...all)*0.85;
+  const sx=i=>(i/(series[0].data.length-1))*(W-pad*2)+pad;
+  const sy=v=>H-pad-((v-min)/(max-min))*(H-pad*2);
+  let svg=`<svg viewBox="0 0 ${W} ${H}" width="100%" height="100%" preserveAspectRatio="none">`;
+  for(let g=0;g<=4;g++){const y=pad+g*(H-pad*2)/4;svg+=`<line x1="${pad}" y1="${y}" x2="${W-pad}" y2="${y}" stroke="#1c2740"/>`;}
+  series.forEach(s=>{
+    const pts=s.data.map((v,i)=>`${sx(i)},${sy(v)}`).join(" ");
+    if(s.area)svg+=`<polygon points="${sx(0)},${H-pad} ${pts} ${sx(s.data.length-1)},${H-pad}" fill="${s.color}" opacity="0.12"/>`;
+    svg+=`<polyline points="${pts}" fill="none" stroke="${s.color}" stroke-width="2.4"/>`;
+  });
+  svg+=`</svg>`;el.innerHTML=svg;
+}
+function gauge(el,pct,label,yoy){
+  const W=120,H=120,cx=60,cy=64,r=46,circ=2*Math.PI*r,off=circ*(1-pct/100);
+  el.innerHTML=`<div class="gauge"><svg viewBox="0 0 ${W} ${H}" width="100%" height="100%">
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#1c2740" stroke-width="10"/>
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="var(--accent)" stroke-width="10" stroke-linecap="round"
+      stroke-dasharray="${circ}" stroke-dashoffset="${off}" transform="rotate(-90 ${cx} ${cy})"/>
+    <text x="${cx}" y="${cy+4}" text-anchor="middle" fill="#e6edf7" font-size="22" font-weight="800">${pct}%</text></svg>
+    <div class="gl">${label}</div><div class="gl" style="color:var(--up)">同比 ${yoy}</div></div>`;
+}
+function donut(el,segs){
+  let html='';
+  segs.forEach(s=>{html+=`<div class="br">
+    <div class="nm"><span class="dot" style="background:${s.color}"></span>${s.name}</div>
+    <div class="track"><div class="fill" style="width:${s.pct}%;background:${s.color}"></div></div>
+    <div class="pc">${s.pct}%</div></div>`;});
+  el.innerHTML=html;
+}
+function ticker(el){
+  const row=t=>`<tr><td>${t[0]}</td><td>${t[1]}</td><td>${t[2]}</td><td>${fmt(t[3])}</td><td>${fmt(t[4])}</td><td>${t[5]==="buy"?'<span class="pill dir-buy">采购</span>':'<span class="pill dir-sell">销售</span>'}</td></tr>`;
+  el.innerHTML=tickets.map(row).join("")+tickets.map(row).join("");
+}
+function clock(){
+  const d=new Date(),p=n=>String(n).padStart(2,"0");
+  document.getElementById("clock").textContent=`${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  document.getElementById("date").textContent=`${d.getFullYear()}年${p(d.getMonth()+1)}月${p(d.getDate())}日 星期${["日","一","二","三","四","五","六"][d.getDay()]}`;
+  document.getElementById("upd").textContent=`${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+lineChart(document.getElementById("trend"),[{data:sales,color:"#2dd4bf",area:true},{data:purch,color:"#60a5fa",area:false}]);
+targets.forEach(t=>{const h=document.createElement("div");document.getElementById("gauges").appendChild(h);gauge(h,Math.round(t.ytd/t.target*100),t.name,t.yoy);});
+donut(document.getElementById("donut"),cats);
+
+/* —— 客户意见 1：各货类当月出入重量及当前库存（库存=货类档案「当前库存」，负数示警） —— */
+const flowData=[
+  {name:"铜",in:568,out:258,stock:186,inA:2840,outA:1290},
+  {name:"铝",in:340,out:165,stock:-448.8,inA:1630,outA:800},
+  {name:"铁·AA",in:152,out:88,stock:9.9,inA:430,outA:250},
+  {name:"铁·A",in:96,out:52,stock:1.4,inA:240,outA:130},
+  {name:"铁·B",in:64,out:30,stock:0,inA:150,outA:70},
+  {name:"其他",in:45,out:22,stock:0.4,inA:90,outA:45}
+];
+(function renderFlow(){
+  const max=Math.max(...flowData.map(d=>d.in+d.out));
+  document.getElementById("flow").innerHTML=flowData.map(d=>{
+    const wi=(d.in/max*100).toFixed(1),wo=(d.out/max*100).toFixed(1);
+    const neg=d.stock<0?" neg":"";
+    return `<div class="fr"><div class="nm">${d.name}</div>
+      <div class="track"><div class="fin" style="width:${wi}%"></div><div class="fout" style="width:${wo}%"></div></div>
+      <div class="vals">收 <b>${d.in}</b> · 出 <b>${d.out}</b> · 库 <b class="${neg}">${d.stock.toLocaleString("en-US")}</b> T<br>收 <b>HK$${d.inA.toLocaleString("en-US")}萬</b> · 出 <b>HK$${d.outA.toLocaleString("en-US")}萬</b></div></div>`;
+  }).join("");
+})();
+
+/* —— 客户意见 3：每月累计出入重量、月末库存量、累计出入金额（本年逐月） —— */
+const mIn=[420,465,438,502,530,486,512,548,560,521,547,568];   // 每月收料重量 T
+const mOut=[186,204,192,225,238,214,228,246,252,236,247,258];  // 每月出料重量 T
+const aIn=[4800,5200,4900,5600,5900,5400,5700,6100,6300,5800,6100,6400];   // 每月收料金额 HK$萬
+const aOut=[5000,5300,5100,5700,6000,5500,5800,6200,6400,5900,6200,6500];  // 每月出料金额 HK$萬
+const cum=a=>a.reduce((acc,v)=>(acc.push((acc[acc.length-1]||0)+v),acc),[]);
+const openStock=1180; // 年初库存（期初）
+const cumInW=cum(mIn),cumOutW=cum(mOut);
+const stockLine=cumInW.map((v,i)=>+(openStock+v-cumOutW[i]).toFixed(1)); // 月末库存 = 期初 + 累计收 − 累计出
+lineChart(document.getElementById("cumW"),[
+  {data:cumInW,color:"#2dd4bf"},
+  {data:cumOutW,color:"#60a5fa"},
+  {data:stockLine,color:"#fbbf24"}
+]);
+lineChart(document.getElementById("cumA"),[
+  {data:cum(aIn),color:"#2dd4bf"},
+  {data:cum(aOut),color:"#60a5fa"}
+]);
+lineChart(document.getElementById("price"),[{data:copper,color:"#2dd4bf",area:false},{data:alum,color:"#60a5fa",area:false}]);
+ticker(document.getElementById("tickerBody"));
+clock();setInterval(clock,1000);
+</script>
+</body>
+</html>

@@ -31,12 +31,28 @@ export function buildAllocationSummary(
   settlementDocNo: string,
   payAmount: number,
   arApAmount: number,
+  waiverAmount = 0,
 ): string {
   if (!settlementDocNo) return "-";
-  if (payAmount > 0 && payAmount < arApAmount) {
-    return `部分核销 ${settlementDocNo}`;
+  const effective = payAmount + waiverAmount;
+  const suffix = waiverAmount > 0 ? `（减免 ${formatWaiverMoney(waiverAmount)}）` : "";
+  if (effective > 0 && effective < arApAmount - 1e-9) {
+    return `部分核销 ${settlementDocNo}${suffix}`;
   }
-  return `核销 ${settlementDocNo}`;
+  return `核销 ${settlementDocNo}${suffix}`;
+}
+
+/** 减免金额展示：2 位小数，去掉多余的尾零 */
+export function formatWaiverMoney(value: number): string {
+  const rounded = Math.round(value * 100) / 100;
+  return rounded.toFixed(2).replace(/\.?0+$/, "");
+}
+
+/** 往来核销的有效核销额 = 实收实付 + 减免（抹零）；其他类别恒为 amount */
+export function paymentEffectiveSettled(payment: PaymentRecord): number {
+  if (payment.category !== "settlement") return Number(payment.amount) || 0;
+  const waiver = Math.max(0, Number(payment.waiverAmount) || 0);
+  return (Number(payment.amount) || 0) + waiver;
 }
 
 export function settlementStatusFromAmounts(
@@ -69,12 +85,14 @@ export function syncArApFromPayments(
 
     const settledRaw = payments
       .filter(
-        (p) =>
+      (p) =>
           p.category === "settlement" &&
+          p.status !== "pending" &&
+          p.status !== "reversed" &&
           p.type === paymentType &&
           paymentSettlementDocId(p) === item.settlementDocId,
       )
-      .reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+      .reduce((sum, p) => sum + paymentEffectiveSettled(p), 0);
 
     const settledAmount = Math.min(Math.max(0, settledRaw), item.amount);
     const balance = Math.max(0, item.amount - settledAmount);
@@ -107,6 +125,8 @@ export function hasSettlementPayments(
   return payments.some(
     (p) =>
       p.category === "settlement" &&
+      p.status !== "pending" &&
+      p.status !== "reversed" &&
       paymentSettlementDocId(p) === settlementDocId,
   );
 }

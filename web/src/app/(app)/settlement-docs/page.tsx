@@ -37,7 +37,6 @@ import { useI18n } from "@/shared/i18n";
 import { useMockStore } from "@/data/mock/store";
 import { useModulePermission } from "@/shared/config/menu-permissions";
 import { useAuth } from "@/features/auth/provider";
-import { hasSettlementPayments } from "@/entities/settlement";
 import { settlementStatusLabel } from "@/shared/i18n/labels";
 import type {
   ArApItem,
@@ -45,6 +44,8 @@ import type {
   WeighSettlementDoc,
   WeighSettlementKind,
 } from "@/entities/types";
+import { CorrectionDeleteModal } from "@/features/correction/components/CorrectionDeleteModal";
+import { useQueryPrefill } from "@/shared/hooks/useQueryPrefill";
 
 const settleToneMap = {
   open: "warning",
@@ -79,9 +80,7 @@ export default function SettlementDocsPage() {
     removeWeighSettlementDoc,
     updateWeighSettlementDoc,
     confirmWeighSettlementDoc,
-    unconfirmWeighSettlementDoc,
     customers,
-    payments,
     receivables,
     payables,
   } = useMockStore();
@@ -97,6 +96,9 @@ export default function SettlementDocsPage() {
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [editingDoc, setEditingDoc] = useState<WeighSettlementDoc | null>(null);
   const [paymentsDoc, setPaymentsDoc] = useState<WeighSettlementDoc | null>(null);
+  const [correctionTarget, setCorrectionTarget] = useState<{ type: "settlement-doc"; id: string; label: string } | null>(null);
+
+  useQueryPrefill("docNo", setDocNo);
   const createMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -124,12 +126,15 @@ export default function SettlementDocsPage() {
   }
 
   function openEdit(row: WeighSettlementDoc) {
-    if (row.status === "confirmed") return;
+    if (row.status !== "pending") return;
     setEditingDoc(row);
   }
 
   async function handleDelete(row: WeighSettlementDoc) {
-    if (row.status === "confirmed") return;
+    if (row.status === "confirmed") {
+      setCorrectionTarget({ type: "settlement-doc", id: row.id, label: row.no });
+      return;
+    }
     const ok = await confirm(deleteConfirmMessage(row.no));
     if (!ok) return;
     removeWeighSettlementDoc(row.id);
@@ -144,28 +149,6 @@ export default function SettlementDocsPage() {
     });
     if (!ok) return;
     confirmWeighSettlementDoc(row.id, { confirmedBy: user?.name });
-  }
-
-  async function handleUnconfirm(row: WeighSettlementDoc) {
-    if (row.status !== "confirmed") return;
-    if (hasSettlementPayments(payments, row.id)) {
-      const goPayments = await confirm({
-        title: t("settlementDocs.unconfirmBlockedTitle"),
-        message: t("settlementDocs.unconfirmBlockedHasPayments"),
-        confirmLabel: t("settlementDocs.goToPayments"),
-        cancelLabel: t("common.close"),
-      });
-      if (goPayments) router.push("/payments");
-      return;
-    }
-    const ok = await confirm({
-      title: t("settlementDocs.unconfirmSettlement"),
-      message: t("settlementDocs.unconfirmSettlementMessage"),
-      confirmLabel: t("settlementDocs.unconfirmSettlement"),
-      danger: true,
-    });
-    if (!ok) return;
-    unconfirmWeighSettlementDoc(row.id);
   }
 
   const customerOptions = useMemo(() => {
@@ -250,10 +233,12 @@ export default function SettlementDocsPage() {
       key: "status",
       header: t("settlementDocs.colConfirmStatus"),
       render: (r) => (
-        <StatusBadge tone={r.status === "confirmed" ? "success" : "warning"}>
+        <StatusBadge tone={r.status === "confirmed" ? "success" : r.status === "void" ? "danger" : "warning"}>
           {r.status === "confirmed"
             ? t("settlementDocs.statusConfirmed")
-            : t("settlementDocs.statusPending")}
+            : r.status === "void"
+              ? t("status.void")
+              : t("settlementDocs.statusPending")}
         </StatusBadge>
       ),
     },
@@ -356,20 +341,31 @@ export default function SettlementDocsPage() {
                   <button
                     type="button"
                     className={actionBtnClass}
-                    aria-label={t("settlementDocs.unconfirmSettlement")}
-                    title={
-                      hasSettlementPayments(payments, r.id)
-                        ? t("settlementDocs.unconfirmBlockedHint")
-                        : t("settlementDocs.unconfirmSettlement")
-                    }
+                    aria-label={t("common.correctionDelete")}
+                    title={t("common.correctionDelete")}
                     onClick={(e) => {
                       e.stopPropagation();
-                      void handleUnconfirm(r);
+                      setCorrectionTarget({ type: "settlement-doc", id: r.id, label: r.no });
                     }}
                   >
                     <ArrowCounterClockwise size={14} />
                   </button>
                 ) : null}
+              </>
+            ) : r.status === "void" ? (
+              <>
+                <button
+                  type="button"
+                  className={actionBtnClass}
+                  aria-label={t("common.detail")}
+                  title={t("common.detail")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    router.push(`/settlement-docs/${r.id}`);
+                  }}
+                >
+                  <Eye size={14} />
+                </button>
               </>
             ) : (
               <>
@@ -445,7 +441,7 @@ export default function SettlementDocsPage() {
   }
 
   const editableDoc =
-    editingDoc && editingDoc.status !== "confirmed" ? editingDoc : null;
+    editingDoc && editingDoc.status === "pending" ? editingDoc : null;
 
   return (
     <ListPageLayout>
@@ -490,6 +486,12 @@ export default function SettlementDocsPage() {
           ) : null
         }
       />
+      <CorrectionDeleteModal
+        open={Boolean(correctionTarget)}
+        target={correctionTarget}
+        label={correctionTarget?.label ?? ""}
+        onClose={() => setCorrectionTarget(null)}
+      />
       <FilterBar>
         <FilterField label={t("settlementDocs.colNo")}>
           <TextInput
@@ -521,6 +523,7 @@ export default function SettlementDocsPage() {
               { value: "all", label: t("common.all") },
               { value: "pending", label: t("settlementDocs.statusPending") },
               { value: "confirmed", label: t("settlementDocs.statusConfirmed") },
+              { value: "void", label: t("status.void") },
             ]}
             aria-label={t("settlementDocs.colConfirmStatus")}
           />

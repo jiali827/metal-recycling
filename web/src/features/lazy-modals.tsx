@@ -48,6 +48,21 @@ export const ProjectTypeDetailModal = dynamic(
   { ssr: false },
 );
 
+export const MiscCategoryCreateModal = dynamic(
+  () =>
+    import("@/features/misc-categories/components/MiscCategoryModals").then((m) => ({
+      default: m.MiscCategoryCreateModal,
+    })),
+  { ssr: false },
+);
+export const MiscCategoryDetailModal = dynamic(
+  () =>
+    import("@/features/misc-categories/components/MiscCategoryModals").then((m) => ({
+      default: m.MiscCategoryDetailModal,
+    })),
+  { ssr: false },
+);
+
 export const RoleCreateModal = dynamic(
   () =>
     import("@/features/roles/components/RoleModals").then((m) => ({
